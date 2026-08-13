@@ -12,6 +12,8 @@ const AIRPORT_PRICE = 15000;
 const MORTGAGE_MAX = 2;
 const MORTGAGE_INTEREST = 0.05;
 const BANKRUPT_RELIEF = 15000; // 破产时发放的救济金总额（分给资产未达最高的存活玩家）
+const LAP_CAP_NORMAL = 4; // 每圈限购城市数（普通玩家）
+const LAP_CAP_LEADER = 2; // 每圈限购城市数（资产最高者，提高翻盘空间）
 const LATE_JAIL_ROUND = 80; // 第 80 轮后 21 号监狱满 3 回合开始收出狱费
 const LATE_JAIL_FEE_RATIO = 0.3; // 出狱费比例
 
@@ -58,6 +60,19 @@ function totalAssetsOf(state, p) {
   v += (p.airports || []).length * AIRPORT_PRICE;
   for (const cid of Object.keys(p.stocks || {})) v += (p.stocks[cid] || 0) * state.stocks[cid].price;
   return v;
+}
+
+// 资产最高者判定（唯一最高才视为领先者）与每圈限购数
+function isTopAsset(state, p) {
+  const alive = state.players.filter((x) => x.alive);
+  if (alive.length < 2) return false;
+  const vals = alive.map((x) => ({ p: x, v: totalAssetsOf(state, x) }));
+  const maxV = Math.max(...vals.map((a) => a.v));
+  const tops = vals.filter((a) => a.v === maxV);
+  return tops.length === 1 && tops[0].p.id === p.id;
+}
+function lapCapFor(state, p) {
+  return isTopAsset(state, p) ? LAP_CAP_LEADER : LAP_CAP_NORMAL;
 }
 
 function refundFor(city) {
@@ -888,8 +903,8 @@ function buyAction(state, p, action, events, rng) {
   const pend = state.pending;
   const city = state.cities[pend.cityId];
   if (action.decision === 'buy') {
-    if (p.lapBuys >= 4) {
-      log(events, `${p.name} 本圈（起点到起点）已达购买上限（4 座房产，机场不限）`, 'buy');
+    if (p.lapBuys >= lapCapFor(state, p)) {
+      log(events, `${p.name} 本圈（起点到起点）已达购买上限（${lapCapFor(state, p)} 座房产，机场不限${isTopAsset(state, p) ? '；资产最高者限购 2 座' : ''}）`, 'buy');
       return;
     }
     if (p.cash < city.price) {
@@ -1024,8 +1039,8 @@ function buyFundraise(state, p, action, events, rng) {
     if (target.kind === 'city') {
       const city = state.cities[target.cityId];
       if (city.ownerId) { endTurn(state, events, rng); return; }
-      if (p.lapBuys >= 4) {
-        log(events, `${p.name} 本圈（起点到起点）已达购买上限（4 座房产，机场不限）`, 'buy');
+      if (p.lapBuys >= lapCapFor(state, p)) {
+        log(events, `${p.name} 本圈（起点到起点）已达购买上限（${lapCapFor(state, p)} 座房产，机场不限）`, 'buy');
         endTurn(state, events, rng);
         return;
       }

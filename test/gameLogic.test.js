@@ -28,9 +28,34 @@ test('购买：落在无主城市进入购买阶段，购买后归属与资金�
   assert.strictEqual(state.players[0].cash, 150000 - 7200);
 });
 
+test('领先者限购：资产最高者每圈最多购买 2 座城市', () => {
+  const state = twoPlayerState();
+  state.players[0].cash = 1000000;
+  state.players[1].cash = 10000; // 甲资产最高
+  const cityIds = ['内罗毕', '开普敦'];
+  for (const cid of cityIds) {
+    state.turnIndex = 0;
+    state.phase = 'buy';
+    state.pending = { playerId: 'p0', cityId: cid, context: null };
+    logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  }
+  assert.strictEqual(state.players[0].lapBuys, 2);
+  // 第 3 座被拒绝（领先者限购 2 座）
+  state.turnIndex = 0;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '卡萨布兰卡', context: null };
+  const cashBefore = state.players[0].cash;
+  const res = logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  assert.strictEqual(state.players[0].cash, cashBefore);
+  assert.strictEqual(state.cities['卡萨布兰卡'].ownerId, null);
+  assert.ok(res.events.some((e) => e.text.includes('购买上限')));
+});
+
+
 test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () => {
   const state = twoPlayerState();
   state.players[0].cash = 1000000;
+  state.players[1].cash = 1000000; // 双方资产相同，无领先者限购
   const cityIds = ['内罗毕', '开普敦', '卡萨布兰卡', '开罗'];
   for (const cid of cityIds) {
     state.turnIndex = 0;
@@ -57,9 +82,34 @@ test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () =>
 });
 
 
+test('领先者限购：资产最高者每圈最多购买 2 座城市', () => {
+  const state = twoPlayerState();
+  state.players[0].cash = 1000000;
+  state.players[1].cash = 10000; // 甲资产最高
+  const cityIds = ['内罗毕', '开普敦'];
+  for (const cid of cityIds) {
+    state.turnIndex = 0;
+    state.phase = 'buy';
+    state.pending = { playerId: 'p0', cityId: cid, context: null };
+    logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  }
+  assert.strictEqual(state.players[0].lapBuys, 2);
+  // 第 3 座被拒绝（领先者限购 2 座）
+  state.turnIndex = 0;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '卡萨布兰卡', context: null };
+  const cashBefore = state.players[0].cash;
+  const res = logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  assert.strictEqual(state.players[0].cash, cashBefore);
+  assert.strictEqual(state.cities['卡萨布兰卡'].ownerId, null);
+  assert.ok(res.events.some((e) => e.text.includes('购买上限')));
+});
+
+
 test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () => {
   const state = twoPlayerState();
   state.players[0].cash = 1000000;
+  state.players[1].cash = 1000000; // 双方资产相同，无领先者限购
   const cityIds = ['内罗毕', '开普敦', '卡萨布兰卡', '开罗'];
   for (const cid of cityIds) {
     state.turnIndex = 0;
