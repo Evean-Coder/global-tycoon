@@ -222,8 +222,10 @@ function finishRender(state) {
     const fresh = ev.filter((e) => e && e.id != null && e.id > lastEventId);
     if (fresh.length) {
       lastEventId = fresh[fresh.length - 1].id;
-      clientLog = fresh.slice().reverse().concat(clientLog).slice(0, 30);
+      clientLog = fresh.slice().reverse().concat(clientLog).slice(0, 500);
       renderSide();
+      const saleFail = fresh.find((e) => e.type === 'sale' && e.text && e.text.indexOf('现金不足，无法购买') >= 0);
+      if (saleFail) toast(saleFail.text);
       const chance = fresh.filter((e) => e.type === 'chance');
       if (chance.length) {
         const c = chance[chance.length - 1];
@@ -281,7 +283,7 @@ function renderSide() {
   }
   const log = $('log');
   log.innerHTML = '';
-  const list = clientLog.filter((e) => e.text).slice(0, 8);
+  const list = clientLog.filter((e) => e.text).slice(0, 30);
   if (!list.length) log.innerHTML = '<div class="ev">暂无事件记录</div>';
   list.forEach((e, i) => {
     const d = document.createElement('div');
@@ -296,6 +298,7 @@ function ledgerCityRow(p, cityId, allowOps) {
   const c = game.cities[cityId];
   const mgCount = p.cities.filter((id) => game.cities[id].mortgaged).length;
   const canRedeem = p.cash >= redeemCost(p, c);
+  const canOpsNow = isMyTurn() && (game.phase === 'waiting_roll' || game.phase === 'stock');
   const row = document.createElement('div');
   row.className = 'lrow';
   row.onclick = () => openCityDetail(cityId);
@@ -311,8 +314,8 @@ function ledgerCityRow(p, cityId, allowOps) {
     if (!c.mortgaged) {
       const m = document.createElement('button');
       m.textContent = '抵押';
-      m.disabled = mgCount >= 2;
-      m.title = mgCount >= 2 ? '已达抵押上限（最多抵押 2 座城市）' : '抵押金 = 总价值 × 50%';
+      m.disabled = !canOpsNow || mgCount >= 2;
+      m.title = !canOpsNow ? '当前阶段无法操作（需轮到你在掷骰阶段）' : (mgCount >= 2 ? '已达抵押上限（最多抵押 2 座城市）' : '抵押金 = 总价值 × 50%');
       m.onclick = (e) => { e.stopPropagation(); socket.emit('action', { type: 'mortgage', cityId }); };
       row.appendChild(m);
       if (p.position === 0) {
@@ -325,8 +328,8 @@ function ledgerCityRow(p, cityId, allowOps) {
     } else {
       const r = document.createElement('button');
       r.textContent = '赎回';
-      r.disabled = !canRedeem;
-      r.title = canRedeem ? '赎回 = 抵押金 + 累计利息' : '现金不足，无法赎回';
+      r.disabled = !canOpsNow || !canRedeem;
+      r.title = !canOpsNow ? '当前阶段无法操作（需轮到你在掷骰阶段）' : (canRedeem ? '赎回 = 抵押金 + 累计利息' : '现金不足，无法赎回');
       r.onclick = (e) => { e.stopPropagation(); socket.emit('action', { type: 'redeem', cityId }); };
       row.appendChild(r);
     }
@@ -533,7 +536,7 @@ function renderPending() {
     case 'auction_bid':
       if (isMe) {
         const city = game.cities[game.pending.cityId];
-        const min = game.pending.currentBid ? game.pending.currentBid + 500 : Math.round(cityTotalValue(city) * 0.3);
+        const min = game.pending.currentBid ? game.pending.currentBid + 1000 : Math.round(cityTotalValue(city) * 0.75);
         body.innerHTML = '<div class="card-tag">AUCTION</div>'
           + kv('竞拍标的', (city.country ? city.country + '·' : '') + game.pending.cityId)
           + kv('当前最高', game.pending.currentBid ? fmt(game.pending.currentBid) : '—')
@@ -583,6 +586,17 @@ function renderPending() {
             + '<button class="risk" onclick="emitAct({type:\'sell_city\',cityId:\'' + id + '\',mode:\'direct\',context:{type:\'self_rescue\',playerId:\'' + me.gameId + '\',due:' + pend.due + '}})">出售 +' + fmt(sellAmt) + '</button>'
             + '<button class="risk" onclick="emitAct({type:\'sell_city\',cityId:\'' + id + '\',mode:\'auction\',context:{type:\'self_rescue\',playerId:\'' + me.gameId + '\',due:' + pend.due + '}})">拍卖保底 +' + fmt(floorAmt) + '</button></div>';
         });
+        const heldStocks = Object.entries(meP.stocks || {}).filter(([, n]) => n > 0);
+        body.innerHTML += '<div class="rule"></div><p class="hint">卖出股票自救（按当前股价，卖出的现金即时到账）：</p>';
+        if (heldStocks.length) {
+          heldStocks.forEach(([cid, n]) => {
+            const st = game.stocks[cid];
+            body.innerHTML += '<div class="lrow" style="cursor:default"><span class="nm">' + (game.cities[cid].country ? game.cities[cid].country + '·' : '') + cid + ' ×' + n + ' 股（股价 ' + st.price + '）</span>'
+              + '<button class="secondary" onclick="emitAct({type:\'rescue_sell_stock\',cityId:\'' + cid + '\'})">卖出 +' + fmt(n * st.price) + '</button></div>';
+          });
+        } else {
+          body.innerHTML += '<p class="hint">没有可卖出的股票。</p>';
+        }
         body.innerHTML += '<div class="row"><button class="risk solid" onclick="emitAct({type:\'rescue_done\'})">放弃（破产）</button></div>';
         openModal('自救');
       }
@@ -824,12 +838,13 @@ function renderStock() {
   for (const cityId of Object.keys(game.stocks)) {
     const st = game.stocks[cityId];
     const city = game.cities[cityId];
+    const owner = playerById(city.ownerId);
     const locked = !city.ownerId || city.mortgaged;
     const div = document.createElement('div');
     div.className = 'stock-item';
     const held = meP ? (meP.stocks[cityId] || 0) : 0;
     const myCityCap = city.ownerId === me.gameId && held >= 1;
-    div.innerHTML = '<b>' + (city.country ? city.country + '·' : '') + cityId + '</b><span class="mono">股价 ' + st.price + '</span><span>持有 ' + held + ' 股' + (locked || myCityCap ? '（锁定' + (myCityCap ? '：本城最多持有 1 股' : '') + '）' : '') + '</span>';
+    div.innerHTML = '<b>' + (city.country ? city.country + '·' : '') + cityId + '</b><span class="mono">股价 ' + st.price + '</span><span>所有者：' + (owner ? owner.name : '无主') + '</span><span>持有 ' + held + ' 股' + (locked || myCityCap ? '（锁定' + (myCityCap ? '：本城最多持有 1 股' : '') + '）' : '') + '</span>';
     if (!locked && !myCityCap && game.phase === 'stock' && isMyTurn()) {
       const d = stockDraft[cityId] || { buy: 0, sell: 0 };
       const stp = document.createElement('div');
@@ -840,7 +855,7 @@ function renderStock() {
     }
     list.appendChild(div);
   }
-  $('stockHint').textContent = (game.phase === 'stock' && isMyTurn()) ? '买入最多 6 股（3 城、单城 2 股），卖出不限' : '仅经过起点时可交易';
+  $('stockHint').textContent = '当前现金：' + fmt(meP ? meP.cash : 0) + '；' + ((game.phase === 'stock' && isMyTurn()) ? '买入最多 6 股（3 城、单城 2 股），卖出不限' : '仅经过起点时可交易');
   renderTransfer();
 }
 function adjStock(cityId, kind, delta) {
@@ -848,7 +863,10 @@ function adjStock(cityId, kind, delta) {
   const meP = game.players.find((p) => p.id === me.gameId);
   const held = meP ? (meP.stocks[cityId] || 0) : 0;
   if (kind === 'sell') d.sell = Math.max(0, Math.min(held, d.sell + delta));
-  else d.buy = Math.max(0, d.buy + delta);
+  else {
+    const ownCap = game.cities[cityId] && game.cities[cityId].ownerId === me.gameId ? 1 - held : 99;
+    d.buy = Math.max(0, Math.min(d.buy + delta, ownCap));
+  }
   stockDraft[cityId] = d;
   renderStock();
 }
@@ -947,6 +965,7 @@ function openBank() {
   const limit = un.reduce((s, id) => s + mortgageValue(game.cities[id]), 0);
   const debt = md.reduce((s, id) => s + mortgageValue(game.cities[id]) + (game.cities[id].mortgageInterest || 0), 0);
   const myTurn = isMyTurn();
+  const canOps = myTurn && (game.phase === 'waiting_roll' || game.phase === 'stock');
   body.innerHTML = '<div class="card-tag">BANK</div>'
     + kv('当前现金', fmt(meP.cash), 'g')
     + kv('可贷款额度', fmt(limit))
@@ -963,8 +982,8 @@ function openBank() {
       b.className = 'secondary';
       b.textContent = '贷款';
       const atLimit = meP.cities.filter((x) => game.cities[x].mortgaged).length >= 2;
-      b.disabled = !myTurn || atLimit;
-      b.title = atLimit ? '已达抵押上限（最多抵押 2 座城市）' : '';
+      b.disabled = !canOps || atLimit;
+      b.title = !canOps ? '当前阶段无法操作（需轮到你在掷骰阶段）' : (atLimit ? '已达抵押上限（最多抵押 2 座城市）' : '');
       b.onclick = () => socket.emit('action', { type: 'mortgage', cityId: id });
       r.appendChild(b);
       wrap.appendChild(r);
@@ -982,8 +1001,8 @@ function openBank() {
       r.innerHTML = '<span class="nm">' + (game.cities[id].country ? game.cities[id].country + '·' : '') + id + '</span><span class="info">赎回 <b>' + fmt(cost) + '</b></span>';
       const b = document.createElement('button');
       b.textContent = '还款';
-      b.disabled = !myTurn || meP.cash < cost;
-      b.title = meP.cash < cost ? '现金不足，无法赎回' : '';
+      b.disabled = !canOps || meP.cash < cost;
+      b.title = !canOps ? '当前阶段无法操作（需轮到你在掷骰阶段）' : (meP.cash < cost ? '现金不足，无法赎回' : '');
       b.onclick = () => socket.emit('action', { type: 'redeem', cityId: id });
       r.appendChild(b);
       wrap2.appendChild(r);

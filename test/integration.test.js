@@ -139,9 +139,9 @@ test('子流程顺序：拍卖轮到非当前回合玩家时可正常出价', as
   // 对方出价：唯一参与者出价后立即成交
   const otherIdx = otherId === 'p1' ? 1 : 0;
   const cashBeforeBid = lastA.players[otherIdx].cash;
-  otherSock.emit('action', { type: 'auction_respond', decision: 'bid', amount: 6500 });
+  otherSock.emit('action', { type: 'auction_respond', decision: 'bid', amount: 90000 });
   await waitFor(() => lastA && lastA.cities[cityId].ownerId === otherId && ['waiting_roll', 'frozen_turn', 'jail_turn'].includes(lastA.phase));
-  assert.strictEqual(lastA.players[otherIdx].cash, cashBeforeBid - 6500);
+  assert.strictEqual(lastA.players[otherIdx].cash, cashBeforeBid - 90000);
 
   a.close();
   b.close();

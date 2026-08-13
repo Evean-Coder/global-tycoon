@@ -122,10 +122,10 @@ test('拍卖：放弃购买进入拍卖，出价最高者获得', () => {
   const rng = diceRng([1]); // 拍卖掷骰定序
   logic.apply(state, { type: 'buy', decision: 'pass' }, rng);
   assert.strictEqual(state.phase, 'auction_bid');
-  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 3000 }, rng);
+  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, rng);
   logic.apply(state, { type: 'auction_respond', decision: 'pass' }, rng);
   assert.strictEqual(state.cities['开普敦'].ownerId, 'p1');
-  assert.strictEqual(state.players[1].cash, 100000 - 3000);
+  assert.strictEqual(state.players[1].cash, 100000 - 5400);
 });
 test('破产：多城连续拍卖逐座完成，唯一侧存者获胜', () => {
   const state = twoPlayerState();
@@ -161,12 +161,12 @@ test('破产：拍卖中另一玩家出价获得后结算胜负', () => {
   const rng = fakeRng([0.5]);
   logic.apply(state, { type: 'rescue_done' }, rng);
   assert.strictEqual(state.phase, 'auction_bid');
-  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 3000 }, rng);
+  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 4500 }, rng);
   logic.apply(state, { type: 'auction_respond', decision: 'pass' }, rng);
   assert.strictEqual(state.status, 'over');
   assert.strictEqual(state.winner, 'p1');
   assert.strictEqual(state.cities['开罗'].ownerId, 'p1');
-  assert.strictEqual(state.players[1].cash, 100000 - 3000);
+  assert.strictEqual(state.players[1].cash, 100000 - 4500);
 });
 
 test('破产：押质城市归银行不进拍卖', () => {
@@ -438,7 +438,12 @@ test('监狱：放弃出狱判定跳过回合，第 3 回合自动释放（免�
   logic.apply(state, { type: 'respond_jail', decision: 'pass' }, rng);
   assert.strictEqual(state.players[0].jailTurns, 2);
   assert.strictEqual(state.turnIndex, 1);
-  // 第 3 回合开始：轮到甲时自动释放并正常行动（出狱费仅用于提前出狱，非强制）
+  // 第 3 回合：仍是出狱判定回合（一直放弃则关满 3 回合）
+  state.turnIndex = 0; state.phase = 'jail_turn'; state.pending = { playerId: 'p0', kind: 'jail' };
+  logic.apply(state, { type: 'respond_jail', decision: 'pass' }, rng);
+  assert.strictEqual(state.players[0].jailTurns, 3);
+  assert.strictEqual(state.turnIndex, 1);
+  // 第 4 回合开始：自动释放（免费，出狱费仅用于提前出狱）
   const evs = [];
   logic.advanceTurn(state, evs, rng);
   assert.strictEqual(state.players[0].jailed, false);
@@ -511,15 +516,22 @@ test('监狱：11/32 号监狱关押 1 回合，下回合自动释放', () => {
   assert.notStrictEqual(state.phase, 'jail_turn'); // 不弹出出狱选择
   assert.strictEqual(state.turnIndex, 1); // 本回合跳过，轮到乙
   assert.ok(r.events.some((e) => e.text.includes('1 回合')));
-  // 乙回合结束 → 轮到甲：自动释放
+  // 乙回合结束 → 轮到甲：关押 1 回合，本回合直接跳过
   const evs = [];
   logic.advanceTurn(state, evs, rng);
+  assert.strictEqual(state.players[0].jailed, true);
+  assert.strictEqual(state.players[0].jailTurns, 1);
+  assert.strictEqual(state.turnIndex, 1);
+  assert.ok(evs.some((e) => e.text.includes('本回合跳过')));
+  // 再次轮到甲：自动释放（免费）
+  const evs2 = [];
+  logic.advanceTurn(state, evs2, rng);
   assert.strictEqual(state.players[0].jailed, false);
   assert.strictEqual(state.players[0].jailTurns, 0);
   assert.strictEqual(state.phase, 'waiting_roll');
   assert.strictEqual(state.turnIndex, 0);
   assert.strictEqual(state.players[0].cash, 200000); // 无需缴费
-  assert.ok(evs.some((e) => e.text.includes('自动释放')));
+  assert.ok(evs2.some((e) => e.text.includes('自动释放')));
   // 入狱卡送到 32 号监狱：同样只关押 1 回合
   const s2 = twoPlayerState();
   s2.players[0].cash = 200000;

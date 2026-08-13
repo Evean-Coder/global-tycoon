@@ -131,21 +131,30 @@ function advanceTurn(state, events, rng) {
   do {
     state.turnIndex = (state.turnIndex + 1) % state.players.length;
   } while (!state.players[state.turnIndex].alive);
-  const p = currentPlayer(state);
+  let p = currentPlayer(state);
+  // 11/32 号监狱：关押 1 回合——该玩家的下一回合直接跳过（不做任何行动）
+  if (p.jailed && jailLimitFor(p.position) === 1 && p.jailTurns < 1) {
+    p.jailTurns = 1;
+    log(events, `${p.name} 被关押 1 回合，本回合跳过`, 'jail');
+    do {
+      state.turnIndex = (state.turnIndex + 1) % state.players.length;
+    } while (!state.players[state.turnIndex].alive);
+    p = currentPlayer(state);
+  }
   log(events, `轮到 ${p.name}`);
   if (p.frozen) {
     state.phase = 'frozen_turn';
     state.pending = { playerId: p.id, kind: 'frozen' };
   } else if (p.jailed) {
     if (jailLimitFor(p.position) === 1) {
-      // 11/32 号监狱：关押 1 回合，回合开始自动释放（无需缴费）
+      // 11/32 号监狱：关押 1 回合到期，自动释放（无需缴费）
       p.jailed = false;
       p.jailTurns = 0;
-      log(events, `${p.name} 关押 1 回合到期，自动释放`, 'jail');
+      log(events, `${p.name} 关押期满，自动释放`, 'jail');
       state.phase = 'waiting_roll';
       state.pending = null;
-    } else if (p.jailTurns >= 2) {
-      // 21 号监狱：关押满 2 回合后，第 3 回合开始自动释放并正常行动（出狱费仅用于提前出狱，非强制）
+    } else if (p.jailTurns >= 3) {
+      // 21 号监狱：关满 3 回合后自动释放（出狱费仅用于提前出狱，非强制）
       p.jailed = false;
       p.jailTurns = 0;
       log(events, `${p.name} 关押满 3 回合，自动释放`, 'jail');
@@ -281,6 +290,10 @@ function resolveChance(state, player, events, rng) {
   const card = state.chanceDeck.shift();
   state.chanceDeck.push(card);
   state.chanceDeck = shuffle(state.chanceDeck, rng);
+  let guard = 0;
+  while (state.chanceDeck.length > 1 && state.chanceDeck[0].name === card.name && guard++ < 20) {
+    state.chanceDeck = shuffle(state.chanceDeck, rng);
+  }
   const amtText = card.type === 'reward' ? `（+${card.amount}）` : card.type === 'fine' ? `（-${card.amount}）` : '';
   log(events, `${player.name} 抽到机会卡「${card.name}」${amtText}`, 'chance');
   if (card.type === 'reward') {
@@ -485,7 +498,7 @@ function startAuction(state, cityId, sellerId, events, rng, extra) {
   for (const pid of state.pending.order) rolls[pid] = rollDice(rng)[0];
   state.pending.order.sort((a, b) => rolls[b] - rolls[a]);
   state.phase = 'auction';
-  log(events, `${cityLabel(state, cityId)} 进入拍卖，起拍价 ${Math.round(cityTotalValue(state.cities[cityId]) * 0.3)}`, 'auction');
+  log(events, `${cityLabel(state, cityId)} 进入拍卖，起拍价 ${Math.round(cityTotalValue(state.cities[cityId]) * 0.75)}`, 'auction');
   advanceAuction(state, events, rng);
 }
 
@@ -493,7 +506,7 @@ function advanceAuction(state, events, rng) {
   const pend = state.pending;
   if (!pend) return;
   const city = state.cities[pend.cityId];
-  const startPrice = Math.round(cityTotalValue(city) * 0.3);
+  const startPrice = Math.round(cityTotalValue(city) * 0.75);
   if (pend.index >= pend.order.length) {
     // 一轮结束
     if (pend.roundBidMade) {
@@ -511,7 +524,7 @@ function advanceAuction(state, events, rng) {
   const bidderId = pend.order[pend.index];
   state.phase = 'auction_bid';
   state.pending.awaiting = bidderId;
-  const min = pend.currentBid ? pend.currentBid + 500 : startPrice;
+  const min = pend.currentBid ? pend.currentBid + 1000 : startPrice;
   log(events, `等待 ${playerById(state, bidderId).name} 出价（至少 ${min}）`, 'auction');
 }
 
@@ -702,6 +715,10 @@ function apply(state, action, rng) {
       if (state.phase !== 'self_rescue' && state.phase !== 'buy_fundraise') return { state, events, rejected: true };
       rescueDemolish(state, p, action.cityId, events, rng);
       break;
+    case 'rescue_sell_stock':
+      if (state.phase !== 'self_rescue') return { state, events, rejected: true };
+      rescueSellStock(state, p, action, events, rng);
+      break;
     case 'rescue_done':
       if (state.phase !== 'self_rescue') return { state, events, rejected: true };
       finishSelfRescue(state, events, rng);
@@ -783,14 +800,7 @@ function jailAction(state, p, action, events, rng) {
     // 放弃本次出狱判定：跳过本回合
     p.jailTurns += 1;
     log(events, `${p.name} 放弃出狱判定（第 ${p.jailTurns} 回合）`);
-    if (p.jailTurns >= 3) {
-      p.jailed = false;
-      p.jailTurns = 0;
-      log(events, `${p.name} 关押满 3 回合，自动释放`);
-      state.phase = 'waiting_roll';
-    } else {
-      endTurn(state, events, rng);
-    }
+    endTurn(state, events, rng);
     return;
   }
   // 掷骰出狱
@@ -817,13 +827,6 @@ function jailAction(state, p, action, events, rng) {
   }
   p.jailTurns += 1;
   log(events, `${p.name} 掷出 ${dice[0]}+${dice[1]}，未出狱（第 ${p.jailTurns} 回合）`);
-  if (p.jailTurns >= 3) {
-    p.jailed = false;
-    p.jailTurns = 0;
-    log(events, `${p.name} 关押满 3 回合，自动释放`);
-    state.phase = 'waiting_roll';
-    return;
-  }
   endTurn(state, events, rng);
 }
 
@@ -1080,6 +1083,19 @@ function rescueDemolish(state, p, cityId, events, rng) {
   if (state.phase === 'self_rescue' && p.cash >= 0) finishSelfRescue(state, events, rng);
 }
 
+function rescueSellStock(state, p, action, events, rng) {
+  const st = state.stocks[action.cityId];
+  if (!st) return;
+  const held = st.holders[p.id] || 0;
+  if (held <= 0) return;
+  const shares = action.shares ? Math.min(action.shares, held) : held;
+  p.cash += shares * st.price;
+  st.holders[p.id] = held - shares;
+  p.stocks[action.cityId] = Math.max(0, (p.stocks[action.cityId] || 0) - shares);
+  log(events, `${p.name} 卖出 ${cityLabel(state, action.cityId)} 股份 ×${shares} 自救（+${shares * st.price}）`, 'rescue');
+  if (state.phase === 'self_rescue' && p.cash >= 0) finishSelfRescue(state, events, rng);
+}
+
 function sellCity(state, p, action, events, rng) {
   const city = state.cities[action.cityId];
   if (city.ownerId !== p.id || city.mortgaged) return;
@@ -1130,8 +1146,8 @@ function auctionRespond(state, action, events, rng) {
   const pend = state.pending;
   const bidder = playerById(state, pend.awaiting);
   const city = state.cities[pend.cityId];
-  const startPrice = Math.round(cityTotalValue(city) * 0.3);
-  const min = pend.currentBid ? pend.currentBid + 500 : startPrice;
+  const startPrice = Math.round(cityTotalValue(city) * 0.75);
+  const min = pend.currentBid ? pend.currentBid + 1000 : startPrice;
   if (action.decision === 'bid') {
     const amount = action.amount;
     if (amount < min || amount > bidder.cash) {
@@ -1168,23 +1184,24 @@ function auctionRespond(state, action, events, rng) {
 
 function stockTrade(state, p, orders, events) {
   if (!orders || !orders.length) return;
-  const buys = orders.filter((o) => o.side === 'buy');
-  const totalBuyShares = buys.reduce((s, o) => s + o.shares, 0);
-  if (buys.length > 3 || totalBuyShares > 6) {
-    log(events, `${p.name} 股票交易未生效：买入最多 3 城、合计 6 股`, 'stock');
-    return;
-  }
-  for (const o of buys) {
+  const validBuys = [];
+  for (const o of orders.filter((x) => x.side === 'buy')) {
     if (o.shares > 2) {
-      log(events, `${p.name} 股票交易未生效：单城最多买 2 股`, 'stock');
-      return;
+      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 单城最多 2 股`, 'stock');
+      continue;
     }
     const city = state.cities[o.cityId];
     if (city.ownerId === p.id && sharesOf(state, p.id, o.cityId) + o.shares > 1) {
-      log(events, `${p.name} 股票交易未生效：城市所有者最多持有 1 股`, 'stock');
-      return;
+      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 城市所有者最多持有 1 股`, 'stock');
+      continue;
     }
+    validBuys.push(o);
   }
+  if (validBuys.length > 3 || validBuys.reduce((s, o) => s + o.shares, 0) > 6) {
+    log(events, `${p.name} 股票交易未生效：买入最多 3 城、合计 6 股`, 'stock');
+    return;
+  }
+  const buys = validBuys;
   let cost = 0, proceeds = 0;
   for (const o of orders) {
     const st = state.stocks[o.cityId];
