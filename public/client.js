@@ -434,8 +434,7 @@ function renderPending() {
       if (isMe) {
         const city = game.cities[game.pending.cityId];
         const poor = meP.cash < city.price;
-        const myCap = (game.lapLeaderId === me.gameId) ? 2 : 4;
-        const lapCap = (meP.lapBuys || 0) >= myCap;
+        const lapCap = (meP.lapBuys || 0) >= 4;
         body.innerHTML = '<div class="card-tag">PROPERTY</div>'
           + kv('地产名称', (city.country ? city.country + '·' : '') + game.pending.cityId)
           + kv('当前价格', fmt(city.price), 'g')
@@ -446,7 +445,7 @@ function renderPending() {
             ? '<p class="hint">现金不足，无法直接购买。你可以募集资金（抵押/拆房凑够地价）或取消购买（进入拍卖）。</p>'
               + '<div class="row"><button class="secondary" onclick="emitAct({type:\'buy_fundraise\',decision:\'start\'})">募集资金</button><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">取消购买</button></div>'
             : (lapCap
-              ? '<p class="hint">本圈（起点到起点）已购买 ' + myCap + ' 座房产，本圈不能再购买城市（机场不限' + ((game.lapLeaderId === me.gameId) ? '；本圈资产最高者限购 2 座' : '') + '）。</p><div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买（进入拍卖）</button></div>'
+              ? '<p class="hint">本圈（起点到起点）已达 4 座房产上限（购买、拍卖与直接出售所得均计入，机场不限），本圈不能再获得城市。</p><div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买（进入拍卖）</button></div>'
               : '<div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买</button><button class="positive" onclick="emitAct({type:\'buy\',decision:\'buy\'})">确认购买</button></div>'));
         openModal('地产购买');
       }
@@ -546,9 +545,12 @@ function renderPending() {
           + kv('竞拍标的', (city.country ? city.country + '·' : '') + game.pending.cityId)
           + kv('当前最高', game.pending.currentBid ? fmt(game.pending.currentBid) : '—')
           + kv('最低出价', fmt(min), 'g')
-          + '<div class="row"><input id="bidAmt" type="number" class="mono" value="' + min + '" min="' + min + '" style="flex:1" />'
-          + '<button class="primary" ' + (iAmTop ? 'disabled title="你已是最高出价者，不能再加价"' : '') + ' onclick="emitAct({type:\'auction_respond\',decision:\'bid\',amount:+$(\'bidAmt\').value})">出价</button>'
-          + '<button class="secondary" onclick="emitAct({type:\'auction_respond\',decision:\'pass\'})">放弃</button></div>';
+          + (iAmTop
+            ? '<p class="hint">你是当前最高出价者（出价 ' + fmt(game.pending.currentBid) + '）。可以按当前价格结束拍卖成交。</p>'
+              + '<div class="row"><button class="primary" onclick="emitAct({type:\'auction_respond\',decision:\'end\'})">结束拍卖</button></div>'
+            : '<div class="row"><input id="bidAmt" type="number" class="mono" value="' + min + '" min="' + min + '" style="flex:1" />'
+              + '<button class="primary" onclick="emitAct({type:\'auction_respond\',decision:\'bid\',amount:+$(\'bidAmt\').value})">出价</button>'
+              + '<button class="secondary" onclick="emitAct({type:\'auction_respond\',decision:\'pass\'})">放弃</button></div>');
         openModal('拍卖');
       } else {
         const bidder = playerById(game.pending.awaiting);
@@ -820,10 +822,10 @@ function buildRules() {
     + '<p><b>目标：</b>初始资金 150000；购买地产、建设城市、投资股票，坚持到最后获胜。货币为纯数字、无面额。</p>'
     + '<p><b>回合：</b>掷单个骰子（1–10，洗牌袋机制：1–10 各一张洗乱入袋，每 10 次掷骰各点数恰好出现一次、顺序随机，避免连出重复点数）。落点按格触发事件；主行动 90 秒、子流程 60 秒，超时自动执行默认动作。</p>'
     + '<p><b>起点结算：</b>跨过/停在起点按顺序：① 获得 5000 并计算名下城市股息 ② 开放一次股票交易窗口 ③ 若为跨过则继续结算落点事件。</p>'
-    + '<p><b>地产与收租：</b>20 城分五大洲（非洲/大洋洲/欧洲/美洲/亚洲）。租金 = 地价 ×（30% + 30%×房屋等级）：0 级 30%、每级 +30%、4 级 150%；地价 ≥15000 的城市满级租金再 +10%（165%）。经过无主城可购买（支付地价）或放弃（进入拍卖）。第一轮（每个玩家从起点出发后回到起点一次）结束前不能购买房产与机场；每圈（起点到起点）限购 4 座城市（机场不限）；资产最高者每圈限购 2 座（于所有存活玩家都经过一次起点后锁定）。购买/获得城市后需再次到达该城市才能建房；经过自有城可建/拆 1 级；抵押中的城市不收租。</p>'
+    + '<p><b>地产与收租：</b>20 城分五大洲（非洲/大洋洲/欧洲/美洲/亚洲）。租金 = 地价 ×（30% + 30%×房屋等级）：0 级 30%、每级 +30%、4 级 150%；地价 ≥15000 的城市满级租金再 +10%（165%）。经过无主城可购买（支付地价）或放弃（进入拍卖）。第一轮（每个玩家从起点出发后回到起点一次）结束前不能购买房产与机场；每圈（起点到起点）限购 4 座城市（机场不限；购买、拍卖与直接出售所得均计入）。购买/获得城市后需再次到达该城市才能建房；经过自有城可建/拆 1 级；抵押中的城市不收租。</p>'
     + '<p><b>建房与拆房：</b>建房费用 = 地价 × 60%，每城最高 4 级；拆房返还地价 × 36%（亏损变现，空地皮无法拆房）。</p>'
     + '<p><b>抵押与赎回：</b>抵押金 = 城市总价值 × 50%，最多同时抵押 2 座；每轮 5% 利息；抵押可随时进行（竞拍中除外）；赎回需落到该城市（站在城市上）后才能执行，银行/资产总览不提供赎回；破产时未赎回的抵押城市归银行。</p>'
-    + '<p><b>城市交易：</b>直接出售——成交价 = 城市总价值，整城售予一名玩家，卖家得 80%、银行提成 20%。拍卖——起拍价 = 总价值 × 75%，每次加价至少 1000，参与玩家掷骰定顺序、轮流加价，其余全放弃时最高出价者获得城市及全部房产；破产拍卖所得归银行、流拍归银行；自愿出售仅在起点执行（资金不足自救除外）；多城同时拍卖按棋盘格号从小到大。</p>'
+    + '<p><b>城市交易：</b>直接出售——成交价 = 城市总价值，整城售予一名玩家，卖家得 80%、银行提成 20%。拍卖——起拍价 = 总价值 × 75%，每次加价至少 1000，参与玩家掷骰定顺序、轮流加价，最高出价者可随时结束拍卖按当前价成交；其余全放弃时最高出价者获得城市及全部房产；拍卖与直接出售所得均计入每圈 4 座上限，已达上限的玩家不能出价/购买；破产拍卖所得归银行、流拍归银行；自愿出售仅在起点执行（资金不足自救除外）；多城同时拍卖按棋盘格号从小到大。</p>'
     + '<p><b>机场：</b>15000 购买（不计入圈限购；第一轮结束前不可购买）；经过他人机场付机场费 = 3000 × 拥有机场数；可再付机票费飞行（每格 500）；飞行到达的机场不再弹出购买。</p>'
     + '<p><b>极地与监狱：</b>极地（南极 14 / 北极 34）冰冻 1 回合，付 5000 解除或跳过。监狱：21 号最多 3 回合——第 1–3 回合可付 15000 或掷出 1/10 提前出狱，一直放弃则关满 3 回合、第 4 回合自动释放（80 轮前免费，80 轮后缴 30% 出狱费 4500）；11/32 号关押 1 回合——下一回合直接跳过、再下一回合自动释放；关押期间仍可收租、参与拍卖。</p>'
     + '<p><b>机会卡：</b>40 张：奖励 15、罚款 15（四档 1:2:4:8、罚款上限 8000）、位移 9、入狱 1；抽取后放回并重新洗牌（避免同一张连续出现）；位移卡照常结算落点；入狱卡送入最近的上一个监狱；移动到起点同样触发 +5000/股息/股票窗口。</p>'

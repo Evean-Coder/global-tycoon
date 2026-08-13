@@ -13,7 +13,6 @@ const MORTGAGE_MAX = 2;
 const MORTGAGE_INTEREST = 0.05;
 const BANKRUPT_RELIEF = 15000; // 破产时发放的救济金总额（分给资产未达最高的存活玩家）
 const LAP_CAP_NORMAL = 4; // 每圈限购城市数（普通玩家）
-const LAP_CAP_LEADER = 2; // 每圈限购城市数（资产最高者，提高翻盘空间）
 const LATE_JAIL_ROUND = 80; // 第 80 轮后 21 号监狱满 3 回合开始收出狱费
 const LATE_JAIL_FEE_RATIO = 0.3; // 出狱费比例
 
@@ -62,8 +61,8 @@ function totalAssetsOf(state, p) {
   return v;
 }
 
-// 圈领先者：所有存活玩家都经过一次起点后，锁定资产最高者为本圈限购对象
-function maybeRefreshLapLeader(state, events) {
+// 圈结算：所有存活玩家都经过一次起点后，完成第一轮检测并重置 lapDone
+function maybeCompleteLapCycle(state, events) {
   const alive = state.players.filter((p) => p.alive);
   if (alive.length < 2) return;
   if (!alive.every((p) => p.lapDone)) return;
@@ -71,20 +70,7 @@ function maybeRefreshLapLeader(state, events) {
     state.firstRoundDone = true;
     log(events, `第一轮结束：所有玩家均已从起点出发回到起点一次，开放购买房产与机场`, 'rule');
   }
-  const vals = alive.map((p) => ({ p, v: totalAssetsOf(state, p) }));
-  const maxV = Math.max(...vals.map((a) => a.v));
-  const tops = vals.filter((a) => a.v === maxV);
-  state.lapLeaderId = tops.length === 1 ? tops[0].p.id : null;
   for (const p of alive) p.lapDone = false;
-  if (state.lapLeaderId) {
-    const leader = playerById(state, state.lapLeaderId);
-    log(events, `${leader.name} 成为本圈资产最高者（每圈限购 2 座城市）`, 'rule');
-  }
-}
-function lapCapFor(state, p) {
-  const leader = state.lapLeaderId ? playerById(state, state.lapLeaderId) : null;
-  if (leader && leader.alive && leader.id === p.id) return LAP_CAP_LEADER;
-  return LAP_CAP_NORMAL;
 }
 
 function refundFor(city) {
@@ -228,7 +214,7 @@ function settleGo(state, player, events) {
   player.cash += GO_BONUS;
   player.lapBuys = 0; // 回到起点重置本圈购买次数
   player.lapDone = true; // 本圈已过起点
-  maybeRefreshLapLeader(state, events);
+  maybeCompleteLapCycle(state, events);
   log(events, `${player.name} 跨过/停在起点，获得 ${GO_BONUS}`);
   // 名下城市股息
   for (const cityId of player.cities) {
@@ -655,7 +641,8 @@ function auctionWin(state, events, rng) {
   winner.cities.push(pend.cityId);
   city.buildReady = false; // 获得后需再次到达才能建房
   bumpStock(state, pend.cityId, 0.1);
-  log(events, `${winner.name} 以 ${pend.currentBid} 获得 ${cityLabel(state, pend.cityId)}（含房产）`, 'auction');
+  winner.lapBuys = (winner.lapBuys || 0) + 1; // 拍卖所得计入每圈 4 座上限制
+  log(events, `${winner.name} 以 ${pend.currentBid} 获得 ${cityLabel(state, pend.cityId)}（含房产，本圈第 ${winner.lapBuys} 座）`, 'auction');
   // 出价归属
   if (pend.sellerId) playerById(state, pend.sellerId).cash += pend.currentBid;
   finishAuction(state, events, winner, rng);
@@ -849,7 +836,7 @@ function rollAction(state, p, events, rng) {
     } else {
       p.lapBuys = 0; // 停在起点同样重置本圈购买次数
       p.lapDone = true;
-      maybeRefreshLapLeader(state, events);
+      maybeCompleteLapCycle(state, events);
       openStockWindow(state, p, events, 'end');
     }
   } else {
@@ -892,7 +879,7 @@ function jailAction(state, p, action, events, rng) {
     if (p.position === GO) {
       p.lapBuys = 0; // 停在起点重置本圈购买次数
       p.lapDone = true;
-      maybeRefreshLapLeader(state, events);
+      maybeCompleteLapCycle(state, events);
       openStockWindow(state, p, events, 'end');
       return;
     }
@@ -920,8 +907,8 @@ function buyAction(state, p, action, events, rng) {
   const pend = state.pending;
   const city = state.cities[pend.cityId];
   if (action.decision === 'buy') {
-    if (p.lapBuys >= lapCapFor(state, p)) {
-      log(events, `${p.name} 本圈（起点到起点）已达购买上限（${lapCapFor(state, p)} 座房产，机场不限${lapCapFor(state, p) === 2 ? '；本圈资产最高者限购 2 座' : ''}）`, 'buy');
+    if (p.lapBuys >= LAP_CAP_NORMAL) {
+      log(events, `${p.name} 本圈（起点到起点）已达购买上限（${LAP_CAP_NORMAL} 座房产，机场不限；购买、拍卖与直接出售所得均计入）`, 'buy');
       return;
     }
     if (p.cash < city.price) {
@@ -1057,8 +1044,8 @@ function buyFundraise(state, p, action, events, rng) {
     if (target.kind === 'city') {
       const city = state.cities[target.cityId];
       if (city.ownerId) { endTurn(state, events, rng); return; }
-      if (p.lapBuys >= lapCapFor(state, p)) {
-        log(events, `${p.name} 本圈（起点到起点）已达购买上限（${lapCapFor(state, p)} 座房产，机场不限）`, 'buy');
+      if (p.lapBuys >= LAP_CAP_NORMAL) {
+        log(events, `${p.name} 本圈（起点到起点）已达购买上限（${LAP_CAP_NORMAL} 座房产，机场不限；购买、拍卖与直接出售所得均计入）`, 'buy');
         endTurn(state, events, rng);
         return;
       }
@@ -1212,7 +1199,9 @@ function directSaleRespond(state, action, events, rng) {
   const city = state.cities[pend.cityId];
   if (action.decision === 'buy') {
     const total = cityTotalValue(city);
-    if (bidder.cash < total) {
+    if (bidder.lapBuys >= LAP_CAP_NORMAL) {
+      log(events, `${bidder.name} 本圈已达 ${LAP_CAP_NORMAL} 座房产上限，无法购买`, 'sale');
+    } else if (bidder.cash < total) {
       log(events, `${bidder.name} 现金不足，无法购买`);
     } else {
       bidder.cash -= total;
@@ -1221,9 +1210,10 @@ function directSaleRespond(state, action, events, rng) {
       city.ownerId = bidder.id;
       if (!bidder.cities.includes(pend.cityId)) bidder.cities.push(pend.cityId);
       city.buildReady = false; // 获得后需再次到达才能建房
+      bidder.lapBuys = (bidder.lapBuys || 0) + 1; // 直接出售所得计入每圈 4 座上限制
       if (seller.cities) seller.cities = seller.cities.filter((id) => id !== pend.cityId);
       bumpStock(state, pend.cityId, 0.1);
-      log(events, `${bidder.name} 以 ${total} 购买 ${cityLabel(state, pend.cityId)}（卖家得 80%）`, 'sale');
+      log(events, `${bidder.name} 以 ${total} 购买 ${cityLabel(state, pend.cityId)}（卖家得 80%，本圈第 ${bidder.lapBuys} 座）`, 'sale');
       const ctx = pend.context;
       if (ctx && ctx.type === 'self_rescue') {
         state.phase = 'self_rescue';
@@ -1247,7 +1237,31 @@ function auctionRespond(state, action, events, rng) {
   const city = state.cities[pend.cityId];
   const startPrice = Math.round(cityTotalValue(city) * 0.75);
   const min = pend.currentBid ? pend.currentBid + 1000 : startPrice;
+  if (action.decision === 'end') {
+    if (bidder.lapBuys >= LAP_CAP_NORMAL) {
+      log(events, `${bidder.name} 本圈已达 ${LAP_CAP_NORMAL} 座房产上限，不能通过拍卖继续获得`, 'auction');
+      pend.index += 1;
+      advanceAuction(state, events, rng);
+      return;
+    }
+    if (!pend.currentBid || bidder.id !== pend.currentBidder) {
+      log(events, `${bidder.name} 不是当前最高出价者，无法结束拍卖`, 'auction');
+      pend.index += 1;
+      advanceAuction(state, events, rng);
+      return;
+    }
+    log(events, `${bidder.name} 以当前最高价 ${pend.currentBid} 结束拍卖`, 'auction');
+    auctionWin(state, events, rng);
+    return;
+  }
   if (action.decision === 'bid') {
+    if (bidder.lapBuys >= LAP_CAP_NORMAL) {
+      // 已达每圈 4 座上限制：不能出价
+      log(events, `${bidder.name} 本圈已达 ${LAP_CAP_NORMAL} 座房产上限，不能参与拍卖`, 'auction');
+      pend.index += 1;
+      advanceAuction(state, events, rng);
+      return;
+    }
     const amount = action.amount;
     if (pend.currentBid > 0 && bidder.id === pend.currentBidder) {
       // 最高出价者不能给自己加价，防止无限循环；视为放弃本次机会

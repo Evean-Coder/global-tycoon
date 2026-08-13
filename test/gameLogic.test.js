@@ -43,38 +43,6 @@ test('购买：落在无主城市进入购买阶段，购买后归属与资金�
   assert.strictEqual(state.players[0].cash, 150000 - 7200);
 });
 
-test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2 座', () => {
-  const state = twoPlayerState();
-  state.players[0].cash = 1000000;
-  state.players[1].cash = 10000;
-  state.players[0].lapDone = true;
-  state.players[1].lapDone = true;
-  state.players[0].position = 40;
-  state.turnIndex = 0;
-  state.phase = 'waiting_roll';
-  logic.apply(state, { type: 'roll_dice' }, diceRng([6])); // 40+6=46 → 4，跨过起点
-  assert.strictEqual(state.lapLeaderId, 'p0'); // 甲资产最高，锁定为本圈领先者
-  assert.strictEqual(state.players[0].lapDone, false); // 快照后重置
-  // 甲（领先者）每圈限购 2 座
-  for (const cid of ['内罗毕', '开普敦']) {
-    state.turnIndex = 0;
-    state.phase = 'buy';
-    state.pending = { playerId: 'p0', cityId: cid, context: null };
-    logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
-  }
-  assert.strictEqual(state.players[0].lapBuys, 2);
-  // 第 3 座被拒绝（领先者限购 2 座）
-  state.turnIndex = 0;
-  state.phase = 'buy';
-  state.pending = { playerId: 'p0', cityId: '卡萨布兰卡', context: null };
-  const cashBefore = state.players[0].cash;
-  const res = logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
-  assert.strictEqual(state.players[0].cash, cashBefore);
-  assert.strictEqual(state.cities['卡萨布兰卡'].ownerId, null);
-  assert.ok(res.events.some((e) => e.text.includes('购买上限')));
-});
-
-
 test('第一轮（所有玩家回到起点一次）结束前不能购买房产和机场', () => {
   const state = twoPlayerState();
   state.players[0].position = 0;
@@ -120,7 +88,7 @@ test('第一轮结束：所有玩家回到起点一次后开放购买', () => {
 test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () => {
   const state = twoPlayerState();
   state.players[0].cash = 1000000;
-  state.players[1].cash = 1000000; // 双方资产相同，无领先者限购
+  state.players[1].cash = 1000000; // 统一每圈 4 座上限，无特殊限制
   const cityIds = ['内罗毕', '开普敦', '卡萨布兰卡', '开罗'];
   for (const cid of cityIds) {
     state.turnIndex = 0;
@@ -147,42 +115,10 @@ test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () =>
 });
 
 
-test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2 座', () => {
-  const state = twoPlayerState();
-  state.players[0].cash = 1000000;
-  state.players[1].cash = 10000;
-  state.players[0].lapDone = true;
-  state.players[1].lapDone = true;
-  state.players[0].position = 40;
-  state.turnIndex = 0;
-  state.phase = 'waiting_roll';
-  logic.apply(state, { type: 'roll_dice' }, diceRng([6])); // 40+6=46 → 4，跨过起点
-  assert.strictEqual(state.lapLeaderId, 'p0'); // 甲资产最高，锁定为本圈领先者
-  assert.strictEqual(state.players[0].lapDone, false); // 快照后重置
-  // 甲（领先者）每圈限购 2 座
-  for (const cid of ['内罗毕', '开普敦']) {
-    state.turnIndex = 0;
-    state.phase = 'buy';
-    state.pending = { playerId: 'p0', cityId: cid, context: null };
-    logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
-  }
-  assert.strictEqual(state.players[0].lapBuys, 2);
-  // 第 3 座被拒绝（领先者限购 2 座）
-  state.turnIndex = 0;
-  state.phase = 'buy';
-  state.pending = { playerId: 'p0', cityId: '卡萨布兰卡', context: null };
-  const cashBefore = state.players[0].cash;
-  const res = logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
-  assert.strictEqual(state.players[0].cash, cashBefore);
-  assert.strictEqual(state.cities['卡萨布兰卡'].ownerId, null);
-  assert.ok(res.events.some((e) => e.text.includes('购买上限')));
-});
-
-
 test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () => {
   const state = twoPlayerState();
   state.players[0].cash = 1000000;
-  state.players[1].cash = 1000000; // 双方资产相同，无领先者限购
+  state.players[1].cash = 1000000; // 统一每圈 4 座上限，无特殊限制
   const cityIds = ['内罗毕', '开普敦', '卡萨布兰卡', '开罗'];
   for (const cid of cityIds) {
     state.turnIndex = 0;
@@ -328,24 +264,67 @@ test('机会卡：抽到奖励卡获得金额', () => {
   assert.strictEqual(state.players[0].cash, 150000 + 8000);
 });
 
-test('拍卖：最高出价者不能给自己加价（防止死循环）', () => {
+test('拍卖：最高出价者可以结束拍卖（按当前最高价成交）', () => {
   const state = createGameState('TEST03', ['甲', '乙', '丙']);
+  state.firstRoundDone = true;
   state.phase = 'buy';
   state.pending = { playerId: 'p0', cityId: '开普敦', context: null };
   logic.apply(state, { type: 'buy', decision: 'pass' }, fakeRng([0.5]));
-  // 乙（第一个出价者）出价
-  let res = logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, fakeRng([0.5]));
+  // 乙（第一个出价者）出价 5400
+  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, fakeRng([0.5]));
   // 丙放弃
   logic.apply(state, { type: 'auction_respond', decision: 'pass' }, fakeRng([0.5]));
-  // 新一轮轮到乙（当前最高出价者）——再次出价应被当作不能再加价，拍卖继续并最终结束
-  let guard = 0;
-  while (state.phase === 'auction_bid' && guard++ < 20) {
-    const who = state.pending.awaiting;
-    res = logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: (state.pending.currentBid || 5400) + 1000 }, fakeRng([0.5]));
-    if (state.phase === 'auction_bid') logic.apply(state, { type: 'auction_respond', decision: 'pass' }, fakeRng([0.5]));
-  }
-  assert.notStrictEqual(state.phase, 'auction_bid'); // 拍卖必须结束
-  assert.ok(state.cities['开普敦'].ownerId); // 有人成交
+  // 新一轮轮到乙（当前最高出价者）→ 结束拍卖，按当前价成交
+  assert.strictEqual(state.pending.awaiting, 'p1');
+  const res = logic.apply(state, { type: 'auction_respond', decision: 'end' }, fakeRng([0.5]));
+  assert.strictEqual(state.cities['开普敦'].ownerId, 'p1');
+  assert.strictEqual(state.players[1].cash, 150000 - 5400);
+  assert.ok(res.events.some((e) => e.text.includes('结束拍卖')));
+});
+
+test('每圈 4 座上限制：拍卖所得计入 lapBuys', () => {
+  const state = twoPlayerState();
+  state.firstRoundDone = true;
+  state.players[0].lapBuys = 3;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '开普敦', context: null };
+  const rng = diceRng([1]); // 拍卖定序
+  logic.apply(state, { type: 'buy', decision: 'pass' }, rng);
+  assert.strictEqual(state.phase, 'auction_bid');
+  // 乙出价成交（乙 lapBuys 从 0 → 1）
+  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, rng);
+  logic.apply(state, { type: 'auction_respond', decision: 'pass' }, rng);
+  assert.strictEqual(state.cities['开普敦'].ownerId, 'p1');
+  assert.strictEqual(state.players[1].lapBuys, 1);
+});
+
+test('每圈 4 座上限制：已达上限的玩家不能参与拍卖出价', () => {
+  const state = twoPlayerState();
+  state.firstRoundDone = true;
+  state.players[1].lapBuys = 4;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '开普敦', context: null };
+  const rng = diceRng([1]); // 拍卖定序
+  logic.apply(state, { type: 'buy', decision: 'pass' }, rng);
+  assert.strictEqual(state.phase, 'auction_bid');
+  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, rng);
+  assert.strictEqual(state.cities['开普敦'].ownerId, null); // 无人可出价 → 流拍归银行
+  assert.strictEqual(state.players[1].lapBuys, 4);
+});
+
+test('每圈 4 座上限制：直接出售所得计入 lapBuys', () => {
+  const state = twoPlayerState();
+  state.cities['开罗'].ownerId = 'p1';
+  state.players[1].cities.push('开罗');
+  state.players[0].position = 0;
+  state.players[0].lapBuys = 3;
+  state.turnIndex = 1; // 卖家为乙（p1）在起点发起直接出售
+  state.phase = 'waiting_roll';
+  logic.apply(state, { type: 'sell_city', cityId: '开罗', mode: 'direct' }, fakeRng([0.5]));
+  assert.strictEqual(state.phase, 'direct_sale_ask');
+  logic.apply(state, { type: 'direct_sale_respond', decision: 'buy' }, fakeRng([0.5]));
+  assert.strictEqual(state.cities['开罗'].ownerId, 'p0');
+  assert.strictEqual(state.players[0].lapBuys, 4);
 });
 
 

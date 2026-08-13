@@ -56,7 +56,6 @@ function createGameState(roomCode, playerNames) {
     airports,
     stocks,
     chanceDeck: buildChanceDeck(),
-    lapLeaderId: null, // 本圈资产最高者（所有存活玩家都经过一次起点后锁定）
     firstRoundDone: false, // 第一轮（每个玩家从起点出发回到起点一次）是否结束；结束前禁止购买房产与机场
     turnIndex: 0,
     phase: 'waiting_roll',
