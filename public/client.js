@@ -279,7 +279,7 @@ function renderSide() {
         if (!p.alive) ost = ' <span class="badge bankrupt">已破产</span>';
         if (p.jailed) ost += ' <span class="badge host">入狱</span>';
         if (p.frozen) ost += ' <span class="badge host">冰冻</span>';
-        return '<div class="pinfo"><b>' + p.name + '</b>' + ost + '</div>'
+        return '<div class="pinfo"><span class="pdot" style="background:' + p.color + '"></span><b>' + p.name + '</b>' + ost + '</div>'
           + '<div class="assets">'
           + '<div class="asset-row"><span>总资产</span><b class="total">' + fmt(totalAssetsFor(p)) + '</b></div>'
           + '<div class="asset-row"><span>当前现金</span><b>' + fmt(p.cash) + '</b></div>'
