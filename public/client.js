@@ -110,7 +110,7 @@ function renderBoard() {
       owner = city.ownerId ? (playerById(city.ownerId)?.name || '') : '';
       if (city.houseLevel > 0) sub += '<span class="lvl">房' + city.houseLevel + '</span>';
       if (city.mortgaged) sub += '<span class="mg">抵</span>';
-      if (city.ownerId) div.onclick = () => openCityDetail(sq.cityId);
+      div.onclick = () => openCityDetail(sq.cityId); // 无主城市也可查看地价/初始租金
     }
     if (sq.type === 'airport') {
       const a = game.airports[sq.airportId];
@@ -832,6 +832,14 @@ function buildRules() {
     + '<p><b>股票：</b>每城 20 股（1 股 = 5%），初始股价 = 地价 ÷ 10 × 2；仅经过起点可买卖，一笔最多 3 城、合计 6 股、单城 2 股（地价 ≥15000 的城市单次最多 1 股）；城市所有者最多持有 4 股（20%）；购买有主城市股票时所有者获得一半收益；股价随购买/升级/易主 +10%、破产 −10%，上限为初始 2 倍；城市所有者过起点派发总价值 × 10% 股息（按股分配，抵押期间不发）；玩家间转让每回合限一笔、每笔最多 3 城、单城 1 股。租客持股减免租金：<20% 不减；≥20% 且 <40% 减 10%；≥40% 且 <60% 减 30%；≥60% 减 50%（上限 50%）。</p>'
     + '<p><b>自救与破产：</b>资金不足时可反复抵押/出售/拍卖/拆房/卖出股票凑钱，凑够或主动放弃才破产；破产时发放 15000 救济金，分给资产未达最高的存活玩家（资产最高者不发放）；认输按破产处理（资产归银行、不进入拍卖、不发放救济金）。</p>'
     + '<p><b>事件记录：</b>全局日志，所有玩家的事件可见（保留 500 条、显示 30 条）。</p>'
+    + '<h4>城市地皮价格（20 城）</h4>'
+    + '<div class="rules-group"><ul>'
+    + '<li>黄·非洲：内罗毕（肯尼亚）3600 / 卡萨布兰卡（摩洛哥）4800 / 开罗（埃及）6000 / 开普敦（南非）7200</li>'
+    + '<li>紫：奥克兰（新西兰）8400 / 阿姆斯特丹（荷兰）10000 / 悉尼（澳大利亚）10800 / 罗马（意大利）12000</li>'
+    + '<li>绿·欧洲：莫斯科（俄罗斯）11000 / 巴黎（法国）13000 / 伦敦（英国）14000 / 柏林（德国）15000</li>'
+    + '<li>蓝·美洲：墨西哥城（墨西哥）12000 / 里约热内卢（巴西）13000 / 多伦多（加拿大）14000 / 纽约（美国）19000</li>'
+    + '<li>红·亚洲：新加坡（新加坡）14000 / 迪拜（阿联酋）15000 / 东京（日本）17000 / 上海（中国）20000</li>'
+    + '</ul></div>'
     + '<h4>机会卡图鉴（40 张）</h4>'
     + groups.map((g) => '<div class="rules-group"><b>' + g.title + '</b><ul>' + g.items.map((i) => '<li>' + i + '</li>').join('') + '</ul></div>').join('');
 }
@@ -1047,6 +1055,7 @@ function openCityDetail(cityId) {
   const mgCount = meP ? meP.cities.filter((id) => game.cities[id].mortgaged).length : 0;
   body.innerHTML = '<div class="card-tag">PROPERTY DETAIL</div>'
     + kv('地产名称', (c.country ? c.country + '·' : '') + cityId)
+    + kv('地皮价格', fmt(c.price), 'g')
     + kv('持有者', owner ? owner.name : '无')
     + kv('房屋等级', (c.houseLevel || 0) + ' 级')
     + kv('当前租金', fmt(rentFor(c)))
