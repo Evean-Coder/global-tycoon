@@ -182,7 +182,7 @@ window.__PREVIEW = (function () {
       + '<div class="rd">卡面效果已结算。</div>'
       + '<span class="stamp">机会 · 资本</span></div>'
       + '<div class="row" style="justify-content:center"><button class="primary">确认</button></div>'),
-    jail: modal('监狱', '<p>你被关押在 21 号监狱。</p><p class="hint">21 号监狱最多关押 3 回合：第 3 回合开始将自动缴纳 15000 出狱并正常行动；11/32 号监狱仅关押 1 回合、到点自动释放。</p><p class="hint">资金不足（当前 ￥8,000），可先募集资金。</p>'
+    jail: modal('监狱', '<p>你被关押在 21 号监狱。</p><p class="hint">21 号监狱最多关押 3 回合：第 1、2 回合可支付 15000 或掷双数提前出狱，第 3 回合自动释放（出狱费非强制）；11/32 号监狱仅关押 1 回合、到点自动释放。</p><p class="hint">资金不足（当前 ￥8,000），可先募集资金。</p>'
       + '<div class="btnrow"><button class="primary" disabled>支付 15000 出狱</button><button class="secondary">掷骰试出狱</button></div>'
       + '<div class="btnrow"><button class="secondary">募集资金</button><button class="secondary">放弃</button></div>'),
     frozen: modal('极地救援', '<div class="card-tag">FROZEN</div><p>你被冰冻了！可支付 5000 购买救援服务解除冰冻并正常行动；放弃则跳过本回合。</p>'

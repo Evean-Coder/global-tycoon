@@ -326,6 +326,46 @@ test('股票：同笔卖出所得可用于买入', () => {
   assert.strictEqual(state.stocks['开罗'].holders['p0'], 1);
 });
 
+test('股票：买卖与未交易均有事件记录', () => {
+  const state = twoPlayerState();
+  state.cities['开罗'].ownerId = 'p1';
+  state.stocks['开罗'].price = 600; // 开罗地价 6000/10
+  state.players[0].cash = 100000;
+  state.phase = 'stock';
+  state.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
+  const res = logic.apply(state, { type: 'stock_trade', orders: [{ cityId: '开罗', side: 'buy', shares: 2 }] }, fakeRng([0.5]));
+  assert.strictEqual(res.rejected, undefined);
+  assert.ok(res.events.some((e) => e.type === 'stock' && e.text.includes('购买 埃及·开罗 股份 ×2（1200）')));
+  // 未交易也有记录
+  const s2 = twoPlayerState();
+  s2.cities['开罗'].ownerId = 'p1';
+  s2.phase = 'stock';
+  s2.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
+  const res2 = logic.apply(s2, { type: 'stock_done' }, fakeRng([0.5]));
+  assert.ok(res2.events.some((e) => e.type === 'stock' && e.text.includes('未进行股票交易')));
+});
+
+
+test('股票：买卖与未交易均有事件记录', () => {
+  const state = twoPlayerState();
+  state.cities['开罗'].ownerId = 'p1';
+  state.stocks['开罗'].price = 600; // 开罗地价 6000/10
+  state.players[0].cash = 100000;
+  state.phase = 'stock';
+  state.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
+  const res = logic.apply(state, { type: 'stock_trade', orders: [{ cityId: '开罗', side: 'buy', shares: 2 }] }, fakeRng([0.5]));
+  assert.strictEqual(res.rejected, undefined);
+  assert.ok(res.events.some((e) => e.type === 'stock' && e.text.includes('购买 埃及·开罗 股份 ×2（1200）')));
+  // 未交易也有记录
+  const s2 = twoPlayerState();
+  s2.cities['开罗'].ownerId = 'p1';
+  s2.phase = 'stock';
+  s2.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
+  const res2 = logic.apply(s2, { type: 'stock_done' }, fakeRng([0.5]));
+  assert.ok(res2.events.some((e) => e.type === 'stock' && e.text.includes('未进行股票交易')));
+});
+
+
 test('股票转让：发起后对方确认回到股票窗口，每回合限一笔', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p1';
@@ -385,7 +425,7 @@ test('购买机场后下一位玩家可正常掷骰（回合切换清空 pending
 });
 
 
-test('监狱：放弃出狱判定跳过回合，第 3 回合自动缴纳罚金出狱', () => {
+test('监狱：放弃出狱判定跳过回合，第 3 回合自动释放（免费）', () => {
   const state = twoPlayerState();
   state.players[0].jailed = true;
   state.players[0].jailTurns = 0;
@@ -401,7 +441,7 @@ test('监狱：放弃出狱判定跳过回合，第 3 回合自动缴纳罚金�
   logic.apply(state, { type: 'respond_jail', decision: 'pass' }, rng);
   assert.strictEqual(state.players[0].jailTurns, 2);
   assert.strictEqual(state.turnIndex, 1);
-  // 第 3 回合开始：轮到甲时自动缴纳罚金出狱并正常行动（不再弹出出狱选择）
+  // 第 3 回合开始：轮到甲时自动释放并正常行动（出狱费仅用于提前出狱，非强制）
   const evs = [];
   logic.advanceTurn(state, evs, rng);
   assert.strictEqual(state.players[0].jailed, false);
@@ -409,8 +449,8 @@ test('监狱：放弃出狱判定跳过回合，第 3 回合自动缴纳罚金�
   assert.strictEqual(state.phase, 'waiting_roll');
   assert.strictEqual(state.pending, null);
   assert.strictEqual(state.turnIndex, 0);
-  assert.strictEqual(state.players[0].cash, 200000 - 15000);
-  assert.ok(evs.some((e) => e.text.includes('自动缴纳')));
+  assert.strictEqual(state.players[0].cash, 200000); // 免费释放，不扣出狱费
+  assert.ok(evs.some((e) => e.text.includes('自动释放')));
 });
 
 

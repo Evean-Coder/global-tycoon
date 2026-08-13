@@ -145,16 +145,12 @@ function advanceTurn(state, events, rng) {
       state.phase = 'waiting_roll';
       state.pending = null;
     } else if (p.jailTurns >= 2) {
-      // 21 号监狱：关押满 2 回合后，第 3 回合开始自动缴纳罚金出狱并正常行动
-      p.cash -= JAIL_FINE;
+      // 21 号监狱：关押满 2 回合后，第 3 回合开始自动释放并正常行动（出狱费仅用于提前出狱，非强制）
       p.jailed = false;
       p.jailTurns = 0;
-      log(events, `${p.name} 关押满 3 回合，自动缴纳 ${JAIL_FINE} 出狱`, 'jail');
-      if (p.cash < 0) startSelfRescue(state, p, -p.cash, events, `出狱罚金`);
-      else {
-        state.phase = 'waiting_roll';
-        state.pending = null;
-      }
+      log(events, `${p.name} 关押满 3 回合，自动释放`, 'jail');
+      state.phase = 'waiting_roll';
+      state.pending = null;
     } else {
       state.phase = 'jail_turn';
       state.pending = { playerId: p.id, kind: 'jail' };
@@ -788,12 +784,10 @@ function jailAction(state, p, action, events, rng) {
     p.jailTurns += 1;
     log(events, `${p.name} 放弃出狱判定（第 ${p.jailTurns} 回合）`);
     if (p.jailTurns >= 3) {
-      p.cash -= JAIL_FINE;
       p.jailed = false;
       p.jailTurns = 0;
-      log(events, `${p.name} 第 3 回合必须支付 ${JAIL_FINE} 出狱`);
-      if (p.cash < 0) startSelfRescue(state, p, -p.cash, events, `出狱罚金`);
-      else state.phase = 'waiting_roll';
+      log(events, `${p.name} 关押满 3 回合，自动释放`);
+      state.phase = 'waiting_roll';
     } else {
       endTurn(state, events, rng);
     }
@@ -824,14 +818,10 @@ function jailAction(state, p, action, events, rng) {
   p.jailTurns += 1;
   log(events, `${p.name} 掷出 ${dice[0]}+${dice[1]}，未出狱（第 ${p.jailTurns} 回合）`);
   if (p.jailTurns >= 3) {
-    p.cash -= JAIL_FINE;
     p.jailed = false;
     p.jailTurns = 0;
-    log(events, `${p.name} 第 3 回合必须支付 ${JAIL_FINE} 出狱`);
-    if (p.cash < 0) startSelfRescue(state, p, -p.cash, events, `出狱罚金`);
-    else {
-      state.phase = 'waiting_roll';
-    }
+    log(events, `${p.name} 关押满 3 回合，自动释放`);
+    state.phase = 'waiting_roll';
     return;
   }
   endTurn(state, events, rng);
@@ -841,6 +831,7 @@ function stockDone(state, events, rng) {
   const pend = state.pending;
   state.pending = null;
   const p = playerById(state, pend.playerId);
+  if (!pend.traded) log(events, `${p.name} 未进行股票交易`, 'stock');
   if (pend.after === 'end') {
     endTurn(state, events, rng);
   } else {
@@ -1200,15 +1191,17 @@ function stockTrade(state, p, orders, events) {
       p.cash -= shares * st.price;
       st.holders[p.id] = (st.holders[p.id] || 0) + shares;
       p.stocks[o.cityId] = (p.stocks[o.cityId] || 0) + shares;
+      log(events, `${p.name} 购买 ${cityLabel(state, o.cityId)} 股份 ×${shares}（${shares * st.price}）`, 'stock');
     } else {
       const held = st.holders[p.id] || 0;
       const sell = Math.min(shares, held);
       p.cash += sell * st.price;
       st.holders[p.id] = held - sell;
       p.stocks[o.cityId] = Math.max(0, (p.stocks[o.cityId] || 0) - sell);
+      log(events, `${p.name} 出售 ${cityLabel(state, o.cityId)} 股份 ×${sell}（${sell * st.price}）`, 'stock');
     }
   }
-  log(events, `${p.name} 完成股票交易`, 'stock');
+  if (state.pending) state.pending.traded = true;
 }
 
 function stockTransfer(state, p, action, events) {
