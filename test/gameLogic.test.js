@@ -260,6 +260,52 @@ test('监狱：连续三次双数入狱，位置为最近上一个入狱格', ()
   assert.strictEqual(state.players[0].position, 21);
 });
 
+test('拍卖：最高出价者不能给自己加价（防止死循环）', () => {
+  const state = createGameState('TEST03', ['甲', '乙', '丙']);
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '开普敦', context: null };
+  logic.apply(state, { type: 'buy', decision: 'pass' }, fakeRng([0.5]));
+  // 乙（第一个出价者）出价
+  let res = logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, fakeRng([0.5]));
+  // 丙放弃
+  logic.apply(state, { type: 'auction_respond', decision: 'pass' }, fakeRng([0.5]));
+  // 新一轮轮到乙（当前最高出价者）——再次出价应被当作不能再加价，拍卖继续并最终结束
+  let guard = 0;
+  while (state.phase === 'auction_bid' && guard++ < 20) {
+    const who = state.pending.awaiting;
+    res = logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: (state.pending.currentBid || 5400) + 1000 }, fakeRng([0.5]));
+    if (state.phase === 'auction_bid') logic.apply(state, { type: 'auction_respond', decision: 'pass' }, fakeRng([0.5]));
+  }
+  assert.notStrictEqual(state.phase, 'auction_bid'); // 拍卖必须结束
+  assert.ok(state.cities['开普敦'].ownerId); // 有人成交
+});
+
+
+test('建房：购买后需再次到达才能建房', () => {
+  const state = twoPlayerState();
+  state.players[0].cash = 200000;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '开罗', context: null };
+  logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  assert.strictEqual(state.cities['开罗'].ownerId, 'p0');
+  assert.strictEqual(state.cities['开罗'].buildReady, false);
+  // 站在刚买的城市上（回合内），build_house 应被拒绝
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  state.players[0].position = 5;
+  const cashBefore = state.players[0].cash;
+  logic.apply(state, { type: 'build_house', cityId: '开罗' }, fakeRng([0.5]));
+  assert.strictEqual(state.cities['开罗'].houseLevel, 0);
+  assert.strictEqual(state.players[0].cash, cashBefore);
+  // 再次到达（落点结算到自己的城市）后可以建房
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  state.players[0].position = 3;
+  logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1])); // 3+2=5 号开罗
+  assert.strictEqual(state.cities['开罗'].buildReady, true);
+});
+
+
 test('破产：唯一幸存者获胜', () => {
   const state = twoPlayerState();
   state.turnIndex = 1;

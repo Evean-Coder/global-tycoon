@@ -306,6 +306,7 @@ function resolveCity(state, player, sq, events, rng) {
       endTurn(state, events, rng);
       return;
     }
+    city.buildReady = true; // 到达自己的城市，恢复建房资格
     state.phase = 'build_decide';
     state.pending = { playerId: player.id, cityId: sq.cityId, kind: 'build' };
     log(events, `${player.name} 经过自己的城市 ${cityLabel(state, sq.cityId)}，可选择建房或拆房`, 'house');
@@ -632,6 +633,7 @@ function auctionWin(state, events, rng) {
   }
   city.ownerId = winner.id;
   winner.cities.push(pend.cityId);
+  city.buildReady = false; // 获得后需再次到达才能建房
   bumpStock(state, pend.cityId, 0.1);
   log(events, `${winner.name} 以 ${pend.currentBid} 获得 ${cityLabel(state, pend.cityId)}（含房产）`, 'auction');
   // 出价归属
@@ -930,6 +932,7 @@ function buyAction(state, p, action, events, rng) {
     city.ownerId = p.id;
     p.cities.push(pend.cityId);
     p.lapBuys = (p.lapBuys || 0) + 1;
+    city.buildReady = false; // 购买后需再次到达才能建房
     bumpStock(state, pend.cityId, 0.1);
     enforceOwnerStockCap(state, p, pend.cityId, events);
     log(events, `${p.name} 购买 ${cityLabel(state, pend.cityId)}（${city.price}，本圈第 ${p.lapBuys} 座）`, 'buy');
@@ -1062,6 +1065,7 @@ function buyFundraise(state, p, action, events, rng) {
       city.ownerId = p.id;
       p.cities.push(target.cityId);
       p.lapBuys = (p.lapBuys || 0) + 1;
+      city.buildReady = false; // 购买后需再次到达才能建房
       bumpStock(state, target.cityId, 0.1);
       enforceOwnerStockCap(state, p, target.cityId, events);
       log(events, `${p.name} 募资完成，购买 ${cityLabel(state, target.cityId)}（${city.price}，本圈第 ${p.lapBuys} 座）`, 'buy');
@@ -1089,7 +1093,8 @@ function buyFundraise(state, p, action, events, rng) {
 function buildHouse(state, p, cityId, events) {
   if (state.phase !== 'waiting_roll') return;
   const city = state.cities[cityId];
-  if (city.ownerId !== p.id || city.mortgaged || city.houseLevel >= 4 || p.position !== state.board.find((s) => s.cityId === cityId).id) {
+  if (city.ownerId !== p.id || city.mortgaged || city.houseLevel >= 4 || p.position !== state.board.find((s) => s.cityId === cityId).id || city.buildReady === false) {
+    log(events, `${p.name} 无法建造：需再次到达 ${cityLabel(state, cityId)} 后才能建房`, 'house');
     return;
   }
   const cost = Math.round(city.price * 0.6);
@@ -1210,6 +1215,7 @@ function directSaleRespond(state, action, events, rng) {
       seller.cash += Math.round(total * 0.8);
       city.ownerId = bidder.id;
       if (!bidder.cities.includes(pend.cityId)) bidder.cities.push(pend.cityId);
+      city.buildReady = false; // 获得后需再次到达才能建房
       if (seller.cities) seller.cities = seller.cities.filter((id) => id !== pend.cityId);
       bumpStock(state, pend.cityId, 0.1);
       log(events, `${bidder.name} 以 ${total} 购买 ${cityLabel(state, pend.cityId)}（卖家得 80%）`, 'sale');
@@ -1238,6 +1244,13 @@ function auctionRespond(state, action, events, rng) {
   const min = pend.currentBid ? pend.currentBid + 1000 : startPrice;
   if (action.decision === 'bid') {
     const amount = action.amount;
+    if (pend.currentBid > 0 && bidder.id === pend.currentBidder) {
+      // 最高出价者不能给自己加价，防止无限循环；视为放弃本次机会
+      log(events, `${bidder.name} 已是最高出价者，不能再加价`, 'auction');
+      pend.index += 1;
+      advanceAuction(state, events, rng);
+      return;
+    }
     if (amount < min || amount > bidder.cash) {
       log(events, `${bidder.name} 出价无效（需 ≥${min} 且不超过现金）`);
       pend.index += 1;

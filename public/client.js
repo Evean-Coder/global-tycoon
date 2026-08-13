@@ -543,12 +543,13 @@ function renderPending() {
       if (isMe) {
         const city = game.cities[game.pending.cityId];
         const min = game.pending.currentBid ? game.pending.currentBid + 1000 : Math.round(cityTotalValue(city) * 0.75);
+        const iAmTop = game.pending.currentBidder === me.gameId;
         body.innerHTML = '<div class="card-tag">AUCTION</div>'
           + kv('竞拍标的', (city.country ? city.country + '·' : '') + game.pending.cityId)
           + kv('当前最高', game.pending.currentBid ? fmt(game.pending.currentBid) : '—')
           + kv('最低出价', fmt(min), 'g')
           + '<div class="row"><input id="bidAmt" type="number" class="mono" value="' + min + '" min="' + min + '" style="flex:1" />'
-          + '<button class="primary" onclick="emitAct({type:\'auction_respond\',decision:\'bid\',amount:+$(\'bidAmt\').value})">出价</button>'
+          + '<button class="primary" ' + (iAmTop ? 'disabled title="你已是最高出价者，不能再加价"' : '') + ' onclick="emitAct({type:\'auction_respond\',decision:\'bid\',amount:+$(\'bidAmt\').value})">出价</button>'
           + '<button class="secondary" onclick="emitAct({type:\'auction_respond\',decision:\'pass\'})">放弃</button></div>';
         openModal('拍卖');
       } else {
@@ -821,7 +822,7 @@ function buildRules() {
     + '<p><b>目标：</b>初始资金 150000；购买地产、建设城市、投资股票，坚持到最后获胜。货币为纯数字、无面额。</p>'
     + '<p><b>回合：</b>掷双骰（一个 1–6、一个 1–3，合计 2–9）。两骰相同（1-1/2-2/3-3）为对子，可再掷一次并继续移动；连续三次对子直接入狱（本次不再移动）。落点按格触发事件；主行动 90 秒、子流程 60 秒，超时自动执行默认动作。</p>'
     + '<p><b>起点结算：</b>跨过/停在起点按顺序：① 获得 5000 并计算名下城市股息 ② 开放一次股票交易窗口 ③ 若为跨过则继续结算落点事件。</p>'
-    + '<p><b>地产与收租：</b>20 城分五大洲（非洲/大洋洲/欧洲/美洲/亚洲）。租金 = 地价 ×（30% + 30%×房屋等级）：0 级 30%、每级 +30%、4 级 150%；地价 ≥15000 的城市满级租金再 +10%（165%）。经过无主城可购买（支付地价）或放弃（进入拍卖）。每圈（起点到起点）限购 4 座城市（机场不限）；资产最高者每圈限购 2 座（于所有存活玩家都经过一次起点后锁定）。经过自有城可建/拆 1 级；抵押中的城市不收租。</p>'
+    + '<p><b>地产与收租：</b>20 城分五大洲（非洲/大洋洲/欧洲/美洲/亚洲）。租金 = 地价 ×（30% + 30%×房屋等级）：0 级 30%、每级 +30%、4 级 150%；地价 ≥15000 的城市满级租金再 +10%（165%）。经过无主城可购买（支付地价）或放弃（进入拍卖）。每圈（起点到起点）限购 4 座城市（机场不限）；资产最高者每圈限购 2 座（于所有存活玩家都经过一次起点后锁定）。购买/获得城市后需再次到达该城市才能建房；经过自有城可建/拆 1 级；抵押中的城市不收租。</p>'
     + '<p><b>建房与拆房：</b>建房费用 = 地价 × 60%，每城最高 4 级；拆房返还地价 × 36%（亏损变现，空地皮无法拆房）。</p>'
     + '<p><b>抵押与赎回：</b>抵押金 = 城市总价值 × 50%，最多同时抵押 2 座；每轮 5% 利息；抵押期间不收租、不能建房、股票冻结；赎回需支付本金 + 累计利息；破产时未赎回的抵押城市归银行。</p>'
     + '<p><b>城市交易：</b>直接出售——成交价 = 城市总价值，整城售予一名玩家，卖家得 80%、银行提成 20%。拍卖——起拍价 = 总价值 × 75%，每次加价至少 1000，参与玩家掷骰定顺序、轮流加价，其余全放弃时最高出价者获得城市及全部房产；破产拍卖所得归银行、流拍归银行；自愿出售仅在起点执行（资金不足自救除外）；多城同时拍卖按棋盘格号从小到大。</p>'
@@ -1054,7 +1055,7 @@ function openCityDetail(cityId) {
     + (c.mortgaged ? kv('累计利息', fmt(c.mortgageInterest || 0), 'r') : '')
     + kv('状态', c.mortgaged ? '<span class="mg">已抵押</span>' : '正常')
     + '<div class="row">'
-    + (mine && !c.mortgaged && (c.houseLevel || 0) < 4 && onCity ? '<button class="secondary" onclick="emitAct({type:\'build_house\',cityId:\'' + cityId + '\'})">升级</button>' : '')
+    + (mine && !c.mortgaged && (c.houseLevel || 0) < 4 && onCity && c.buildReady !== false ? '<button class="secondary" onclick="emitAct({type:\'build_house\',cityId:\'' + cityId + '\'})">升级</button>' : '')
     + (mine && !c.mortgaged && (c.houseLevel || 0) > 0 && onCity ? '<button class="secondary" onclick="emitAct({type:\'demolish_house\',cityId:\'' + cityId + '\'})">拆房</button>' : '')
     + (mine && !c.mortgaged ? '<button class="secondary" ' + (mgCount >= 2 ? 'disabled title="已达抵押上限（最多抵押 2 座城市）"' : '') + ' onclick="emitAct({type:\'mortgage\',cityId:\'' + cityId + '\'})">抵押</button>' : '')
     + (mine && c.mortgaged ? '<button class="secondary" ' + (meP && meP.cash < redeemCost(meP, c) ? 'disabled title="现金不足，无法赎回"' : '') + ' onclick="emitAct({type:\'redeem\',cityId:\'' + cityId + '\'})">赎回</button>' : '')
