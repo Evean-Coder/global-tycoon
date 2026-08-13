@@ -475,6 +475,7 @@ function renderPending() {
         const tname = isCity ? (game.cities[t.cityId].country ? game.cities[t.cityId].country + '·' : '') + t.cityId : t.airportId;
         const enough = meP.cash >= price;
         const owned = meP.cities.filter((id) => !game.cities[id].mortgaged);
+        const mgCapF = meP.cities.filter((x) => game.cities[x].mortgaged).length >= 2;
         let html = '<div class="card-tag">FUNDRAISE</div>'
           + kv('购买目标', tname)
           + kv('所需资金', fmt(price), 'g')
@@ -485,7 +486,7 @@ function renderPending() {
           owned.forEach((id) => {
             const c = game.cities[id];
             html += '<div class="lrow" style="cursor:default"><span class="nm">' + (c.country ? c.country + '·' : '') + id + '（房 ' + (c.houseLevel || 0) + '）</span>'
-              + '<button class="secondary" onclick="emitAct({type:\'rescue_mortgage\',cityId:\'' + id + '\'})">抵押 +' + fmt(mortgageValue(c)) + '</button>'
+              + '<button class="secondary" ' + (mgCapF ? 'disabled title="已达抵押上限（最多抵押 2 座城市）"' : '') + ' onclick="emitAct({type:\'rescue_mortgage\',cityId:\'' + id + '\'})">抵押 +' + fmt(mortgageValue(c)) + '</button>'
               + (c.houseLevel > 0 ? '<button onclick="emitAct({type:\'rescue_demolish\',cityId:\'' + id + '\'})">拆房 +' + fmt(Math.round(c.price * 0.36)) + '</button>' : '')
               + '</div>';
           });
@@ -578,6 +579,7 @@ function renderPending() {
       if (isMe) {
         const pend = game.pending;
         const owned = meP.cities.filter((id) => !game.cities[id].mortgaged);
+        const mgCap = meP.cities.filter((x) => game.cities[x].mortgaged).length >= 2;
         body.innerHTML = '<div class="card-tag">SELF RESCUE</div><p>资金不足（欠 ' + fmt(pend.due) + '），选择自救：</p>';
         body.innerHTML += '<p class="hint">金额：抵押 = 总价值 × 50%；直接出售 = 总价值 × 80%；拍卖流拍保底 = 总价值 × 50%。</p>';
         owned.forEach((id) => {
@@ -586,7 +588,7 @@ function renderPending() {
           const sellAmt = Math.round(tv * 0.8);
           const floorAmt = Math.round(tv * 0.5);
           body.innerHTML += '<div class="lrow" style="cursor:default;flex-wrap:wrap"><span class="nm">' + (c.country ? c.country + '·' : '') + id + '（价值 ' + fmt(tv) + '，房 ' + (c.houseLevel || 0) + '）</span>'
-            + '<button class="secondary" onclick="emitAct({type:\'rescue_mortgage\',cityId:\'' + id + '\'})">抵押 +' + fmt(mortgageValue(c)) + '</button>'
+            + '<button class="secondary" ' + (mgCap ? 'disabled title="已达抵押上限（最多抵押 2 座城市）"' : '') + ' onclick="emitAct({type:\'rescue_mortgage\',cityId:\'' + id + '\'})">抵押 +' + fmt(mortgageValue(c)) + '</button>'
             + (c.houseLevel > 0 ? '<button onclick="emitAct({type:\'rescue_demolish\',cityId:\'' + id + '\'})">拆房 +' + fmt(Math.round(c.price * 0.36)) + '</button>' : '')
             + '<button class="risk" onclick="emitAct({type:\'sell_city\',cityId:\'' + id + '\',mode:\'direct\',context:{type:\'self_rescue\',playerId:\'' + me.gameId + '\',due:' + pend.due + '}})">出售 +' + fmt(sellAmt) + '</button>'
             + '<button class="risk" onclick="emitAct({type:\'sell_city\',cityId:\'' + id + '\',mode:\'auction\',context:{type:\'self_rescue\',playerId:\'' + me.gameId + '\',due:' + pend.due + '}})">拍卖保底 +' + fmt(floorAmt) + '</button></div>';

@@ -1145,9 +1145,15 @@ function redeem(state, p, cityId, events) {
 
 function rescueMortgage(state, p, cityId, events, rng) {
   const city = state.cities[cityId];
-  if (city.ownerId !== p.id || city.mortgaged) return;
+  if (city.ownerId !== p.id || city.mortgaged) {
+    log(events, `${p.name} 无法抵押 ${cityLabel(state, cityId)}：非本人或已抵押`, 'rescue');
+    return;
+  }
   const mortgagedCount = p.cities.filter((id) => state.cities[id].mortgaged).length;
-  if (mortgagedCount >= MORTGAGE_MAX) return;
+  if (mortgagedCount >= MORTGAGE_MAX) {
+    log(events, `${p.name} 无法抵押：已达抵押上限（最多 2 座）`, 'rescue');
+    return;
+  }
   const val = mortgageValue(city);
   p.cash += val;
   city.mortgaged = true;
