@@ -17,9 +17,9 @@ function createRng(seed) {
   return Math.random;
 }
 
-// 掷两个骰子：一个 1–6，另一个 1–4（四个数字等概率）
+// 掷两个骰子：各 1–6（36 种组合，总和 2–12，双数概率 1/6）
 function rollDice(rng) {
-  return [1 + Math.floor(rng() * 6), 1 + Math.floor(rng() * 4)];
+  return [1 + Math.floor(rng() * 6), 1 + Math.floor(rng() * 6)];
 }
 
 // Fisher–Yates 洗牌
