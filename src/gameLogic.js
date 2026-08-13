@@ -142,18 +142,10 @@ function sharesOf(state, playerId, cityId) {
 // ---------- 回合推进 ----------
 
 function advanceTurn(state, events, rng) {
-  // 清算抵押利息：一轮（所有存活玩家各行动一次）结束时计息
   if (state.turnIndex === 0) state.rounds++;
   for (const p of state.players) {
     if (!p.alive) continue;
     p.transferDone = false; // 每回合重置：股票转让每回合至多一笔
-    for (const cityId of p.cities) {
-      const c = state.cities[cityId];
-      if (c.mortgaged) {
-        const interest = Math.round(mortgageValue(c) * MORTGAGE_INTEREST);
-        c.mortgageInterest = (c.mortgageInterest || 0) + interest;
-      }
-    }
   }
   const alive = alivePlayers(state);
   if (alive.length <= 1) {
@@ -167,6 +159,18 @@ function advanceTurn(state, events, rng) {
   do {
     state.turnIndex = (state.turnIndex + 1) % state.players.length;
   } while (!state.players[state.turnIndex].alive);
+  // 一轮（所有存活玩家各行动一次）完成时：清算抵押利息一次
+  if (state.turnIndex === 0) {
+    for (const pp of state.players) {
+      if (!pp.alive) continue;
+      for (const cityId of pp.cities) {
+        const cc = state.cities[cityId];
+        if (cc.mortgaged) {
+          cc.mortgageInterest = (cc.mortgageInterest || 0) + Math.round(mortgageValue(cc) * MORTGAGE_INTEREST);
+        }
+      }
+    }
+  }
   let p = currentPlayer(state);
   // 11/32 号监狱：关押 1 回合——该玩家的下一回合直接跳过（不做任何行动）
   if (p.jailed && jailLimitFor(p.position) === 1 && p.jailTurns < 1) {
@@ -761,11 +765,12 @@ function apply(state, action, rng) {
       demolishHouse(state, p, action.cityId, events, rng);
       break;
     case 'mortgage':
-      if (!['waiting_roll', 'stock', 'self_rescue'].includes(state.phase)) return { state, events, rejected: true };
+      // 抵押可随时进行（竞拍中不可临时抵押凑钱、交易确认与游戏结束除外）
+      if (['game_over', 'auction_bid', 'direct_sale_ask', 'trade_confirm'].includes(state.phase)) return { state, events, rejected: true };
       mortgage(state, p, action.cityId, events, rng);
       break;
     case 'redeem':
-      if (!['waiting_roll', 'stock', 'self_rescue'].includes(state.phase)) return { state, events, rejected: true };
+      if (state.phase !== 'waiting_roll') return { state, events, rejected: true };
       redeem(state, p, action.cityId, events);
       break;
     case 'sell_city':
@@ -1131,7 +1136,7 @@ function mortgage(state, p, cityId, events, rng) {
     rescueMortgage(state, p, cityId, events, rng);
     return;
   }
-  if (state.phase !== 'waiting_roll' && state.phase !== 'stock') return;
+  // 抵押可随时进行（排除项由 apply 处理）
   const city = state.cities[cityId];
   if (city.ownerId !== p.id || city.mortgaged) return;
   const mortgagedCount = p.cities.filter((id) => state.cities[id].mortgaged).length;
@@ -1143,9 +1148,13 @@ function mortgage(state, p, cityId, events, rng) {
 }
 
 function redeem(state, p, cityId, events) {
-  if (state.phase !== 'waiting_roll' && state.phase !== 'stock') return;
+  if (state.phase !== 'waiting_roll') return;
   const city = state.cities[cityId];
-  if (city.ownerId !== p.id || !city.mortgaged) return;
+  // 赎回需站在该城市格上（落到城市后才能赎回）
+  if (city.ownerId !== p.id || !city.mortgaged || p.position !== state.board.find((s) => s.cityId === cityId).id) {
+    if (city.ownerId === p.id && city.mortgaged) log(events, `${p.name} 无法赎回 ${cityLabel(state, cityId)}：需落到该城市后才能赎回`, 'mortgage');
+    return;
+  }
   const cost = mortgageValue(city) + (city.mortgageInterest || 0);
   if (p.cash < cost) return;
   p.cash -= cost;
@@ -1294,6 +1303,10 @@ function stockTrade(state, p, orders, events) {
   const validBuys = [];
   for (const o of orders.filter((x) => x.side === 'buy')) {
     const city = state.cities[o.cityId];
+    if (city.mortgaged) {
+      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 抵押期间股票冻结`, 'stock');
+      continue;
+    }
     if (o.shares > 2) {
       log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 单城最多 2 股`, 'stock');
       continue;
@@ -1313,7 +1326,11 @@ function stockTrade(state, p, orders, events) {
     return;
   }
   const buys = validBuys;
-  const execute = validBuys.concat(orders.filter((x) => x.side !== 'buy'));
+  const validSells = orders.filter((x) => x.side !== 'buy').filter((x) => !state.cities[x.cityId].mortgaged);
+  for (const o of orders.filter((x) => x.side !== 'buy')) {
+    if (state.cities[o.cityId].mortgaged) log(events, `${p.name} 跳过无效卖出：${cityLabel(state, o.cityId)} 抵押期间股票冻结`, 'stock');
+  }
+  const execute = validBuys.concat(validSells);
   let cost = 0, proceeds = 0;
   for (const o of execute) {
     const st = state.stocks[o.cityId];

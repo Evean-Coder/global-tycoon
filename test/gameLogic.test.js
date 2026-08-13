@@ -246,7 +246,18 @@ test('建房与拆房：经过自有城可建 1 级、拆 1 级返还 60%', () =
   assert.strictEqual(state.players[0].cash, 150000 - 2160 + 1296);
 });
 
-test('抵押与赎回：抵押金=总价值×50%，计息 5%，赎回付本金+利息', () => {
+test('抵押可随时进行（非掷骰阶段也可）', () => {
+  const state = twoPlayerState();
+  state.cities['开罗'].ownerId = 'p0';
+  state.players[0].cities.push('开罗');
+  state.phase = 'build_decide'; // 非掷骰阶段
+  state.pending = { playerId: 'p0', cityId: '开罗', kind: 'build' };
+  logic.apply(state, { type: 'mortgage', cityId: '开罗' }, fakeRng([0.5]));
+  assert.strictEqual(state.cities['开罗'].mortgaged, true);
+});
+
+
+test('抵押与赎回：每轮计息 5%；赎回需站在该城市', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p0';
   state.players[0].cities.push('开罗');
@@ -254,13 +265,23 @@ test('抵押与赎回：抵押金=总价值×50%，计息 5%，赎回付本金+�
   logic.apply(state, { type: 'mortgage', cityId: '开罗' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgaged, true);
   assert.strictEqual(state.players[0].cash, 150000 + 3000);
+  // 推进一轮（乙回合结束回到甲）→ 计息一次
+  state.turnIndex = 1;
   logic.advanceTurn(state, [], fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgageInterest, 150);
+  // 不在城市上时赎回被拒
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
   state.players[0].cash += 3150;
+  const cashBefore = state.players[0].cash;
+  logic.apply(state, { type: 'redeem', cityId: '开罗' }, fakeRng([0.5]));
+  assert.strictEqual(state.cities['开罗'].mortgaged, true);
+  assert.strictEqual(state.players[0].cash, cashBefore);
+  // 站在开罗（5 号）上可赎回
+  state.players[0].position = 5;
   logic.apply(state, { type: 'redeem', cityId: '开罗' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgaged, false);
+  assert.strictEqual(state.cities['开罗'].mortgageInterest, 0);
   assert.strictEqual(state.players[0].cash, 150000 + 3000);
 });
 
@@ -535,12 +556,13 @@ test('抵押：利息按城市累计，赎回一城只付该城本金+利息', (
   // 推进两轮计息
   state.turnIndex = 1;
   logic.advanceTurn(state, [], fakeRng([0.5]));
-  state.turnIndex = 0;
+  state.turnIndex = 1;
   logic.advanceTurn(state, [], fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgageInterest, Math.round(3000 * 0.05) * 2);
   assert.strictEqual(state.cities['东京'].mortgageInterest, Math.round(8500 * 0.05) * 2);
   // 赎回开罗：只付开罗本金+利息，东京利息保留
   state.turnIndex = 0;
+  state.players[0].position = 5;
   logic.apply(state, { type: 'redeem', cityId: '开罗' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgaged, false);
   assert.strictEqual(state.cities['开罗'].mortgageInterest, 0);

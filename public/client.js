@@ -298,7 +298,7 @@ function ledgerCityRow(p, cityId, allowOps) {
   const c = game.cities[cityId];
   const mgCount = p.cities.filter((id) => game.cities[id].mortgaged).length;
   const canRedeem = p.cash >= redeemCost(p, c);
-  const canOpsNow = isMyTurn() && (game.phase === 'waiting_roll' || game.phase === 'stock');
+  const canOpsNow = isMyTurn() && !['auction_bid', 'direct_sale_ask', 'trade_confirm'].includes(game.phase);
   const row = document.createElement('div');
   row.className = 'lrow';
   row.onclick = () => openCityDetail(cityId);
@@ -326,12 +326,10 @@ function ledgerCityRow(p, cityId, allowOps) {
         row.appendChild(sd);
       }
     } else {
-      const r = document.createElement('button');
-      r.textContent = '赎回';
-      r.disabled = !canOpsNow || !canRedeem;
-      r.title = !canOpsNow ? '当前阶段无法操作（需轮到你在掷骰阶段）' : (canRedeem ? '赎回 = 抵押金 + 累计利息' : '现金不足，无法赎回');
-      r.onclick = (e) => { e.stopPropagation(); socket.emit('action', { type: 'redeem', cityId }); };
-      row.appendChild(r);
+      const tip = document.createElement('span');
+      tip.className = 'info';
+      tip.textContent = '（赎回需落到该城市）';
+      row.appendChild(tip);
     }
   }
   return row;
@@ -824,7 +822,7 @@ function buildRules() {
     + '<p><b>起点结算：</b>跨过/停在起点按顺序：① 获得 5000 并计算名下城市股息 ② 开放一次股票交易窗口 ③ 若为跨过则继续结算落点事件。</p>'
     + '<p><b>地产与收租：</b>20 城分五大洲（非洲/大洋洲/欧洲/美洲/亚洲）。租金 = 地价 ×（30% + 30%×房屋等级）：0 级 30%、每级 +30%、4 级 150%；地价 ≥15000 的城市满级租金再 +10%（165%）。经过无主城可购买（支付地价）或放弃（进入拍卖）。第一轮（所有玩家各自行动一次）不能购买城市，从第二轮开始可购买；每圈（起点到起点）限购 4 座城市（机场不限）；资产最高者每圈限购 2 座（于所有存活玩家都经过一次起点后锁定）。购买/获得城市后需再次到达该城市才能建房；经过自有城可建/拆 1 级；抵押中的城市不收租。</p>'
     + '<p><b>建房与拆房：</b>建房费用 = 地价 × 60%，每城最高 4 级；拆房返还地价 × 36%（亏损变现，空地皮无法拆房）。</p>'
-    + '<p><b>抵押与赎回：</b>抵押金 = 城市总价值 × 50%，最多同时抵押 2 座；每轮 5% 利息；抵押期间不收租、不能建房、股票冻结；赎回需支付本金 + 累计利息；破产时未赎回的抵押城市归银行。</p>'
+    + '<p><b>抵押与赎回：</b>抵押金 = 城市总价值 × 50%，最多同时抵押 2 座；每轮 5% 利息；抵押可随时进行（竞拍中除外）；赎回需落到该城市（站在城市上）后才能执行，银行/资产总览不提供赎回；破产时未赎回的抵押城市归银行。</p>'
     + '<p><b>城市交易：</b>直接出售——成交价 = 城市总价值，整城售予一名玩家，卖家得 80%、银行提成 20%。拍卖——起拍价 = 总价值 × 75%，每次加价至少 1000，参与玩家掷骰定顺序、轮流加价，其余全放弃时最高出价者获得城市及全部房产；破产拍卖所得归银行、流拍归银行；自愿出售仅在起点执行（资金不足自救除外）；多城同时拍卖按棋盘格号从小到大。</p>'
     + '<p><b>机场：</b>15000 购买（不计入圈限购）；经过他人机场付机场费 = 3000 × 拥有机场数；可再付机票费飞行（每格 500）；飞行到达的机场不再弹出购买。</p>'
     + '<p><b>极地与监狱：</b>极地（南极 14 / 北极 34）冰冻 1 回合，付 5000 解除或跳过。监狱：21 号最多 3 回合——第 1–3 回合可付 15000 或掷对子提前出狱，一直放弃则关满 3 回合、第 4 回合自动释放（80 轮前免费，80 轮后缴 30% 出狱费 4500）；11/32 号关押 1 回合——下一回合直接跳过、再下一回合自动释放；关押期间仍可收租、参与拍卖，掷骰不计入连续对子。</p>'
@@ -996,7 +994,7 @@ function openBank() {
   const limit = un.reduce((s, id) => s + mortgageValue(game.cities[id]), 0);
   const debt = md.reduce((s, id) => s + mortgageValue(game.cities[id]) + (game.cities[id].mortgageInterest || 0), 0);
   const myTurn = isMyTurn();
-  const canOps = myTurn && (game.phase === 'waiting_roll' || game.phase === 'stock');
+  const canOps = myTurn && !['auction_bid', 'direct_sale_ask', 'trade_confirm'].includes(game.phase);
   body.innerHTML = '<div class="card-tag">BANK</div>'
     + kv('当前现金', fmt(meP.cash), 'g')
     + kv('可贷款额度', fmt(limit))
@@ -1021,25 +1019,7 @@ function openBank() {
     }
     body.appendChild(wrap);
   } else body.innerHTML += '<p class="hint">没有可贷款的未抵押城市</p>';
-  body.innerHTML += '<label>还款（赎回已抵押城市）</label>';
-  if (md.length) {
-    const wrap2 = document.createElement('div');
-    wrap2.className = 'ledger-list';
-    for (const id of md) {
-      const cost = redeemCost(meP, game.cities[id]);
-      const r = document.createElement('div');
-      r.className = 'lrow';
-      r.innerHTML = '<span class="nm">' + (game.cities[id].country ? game.cities[id].country + '·' : '') + id + '</span><span class="info">赎回 <b>' + fmt(cost) + '</b></span>';
-      const b = document.createElement('button');
-      b.textContent = '还款';
-      b.disabled = !canOps || meP.cash < cost;
-      b.title = !canOps ? '当前阶段无法操作（需轮到你在掷骰阶段）' : (meP.cash < cost ? '现金不足，无法赎回' : '');
-      b.onclick = () => socket.emit('action', { type: 'redeem', cityId: id });
-      r.appendChild(b);
-      wrap2.appendChild(r);
-    }
-    body.appendChild(wrap2);
-  } else body.innerHTML += '<p class="hint">没有待还款的抵押城市</p>';
+  body.innerHTML += '<p class="hint">赎回需落到对应城市后才能进行（在银行/资产界面不提供，抵押可随时进行）。</p>';
   body.innerHTML += '<div class="row"><button class="textbtn" onclick="closeModal()">关闭</button></div>';
   openModal('银行交易');
 }
@@ -1067,7 +1047,7 @@ function openCityDetail(cityId) {
     + (mine && !c.mortgaged && (c.houseLevel || 0) < 4 && onCity && c.buildReady !== false ? '<button class="secondary" onclick="emitAct({type:\'build_house\',cityId:\'' + cityId + '\'})">升级</button>' : '')
     + (mine && !c.mortgaged && (c.houseLevel || 0) > 0 && onCity ? '<button class="secondary" onclick="emitAct({type:\'demolish_house\',cityId:\'' + cityId + '\'})">拆房</button>' : '')
     + (mine && !c.mortgaged ? '<button class="secondary" ' + (mgCount >= 2 ? 'disabled title="已达抵押上限（最多抵押 2 座城市）"' : '') + ' onclick="emitAct({type:\'mortgage\',cityId:\'' + cityId + '\'})">抵押</button>' : '')
-    + (mine && c.mortgaged ? '<button class="secondary" ' + (meP && meP.cash < redeemCost(meP, c) ? 'disabled title="现金不足，无法赎回"' : '') + ' onclick="emitAct({type:\'redeem\',cityId:\'' + cityId + '\'})">赎回</button>' : '')
+    + (mine && c.mortgaged && onCity ? '<button class="secondary" ' + (meP && meP.cash < redeemCost(meP, c) ? 'disabled title="现金不足，无法赎回"' : '') + ' onclick="emitAct({type:\'redeem\',cityId:\'' + cityId + '\'})">赎回</button>' : '')
     + (mine && !c.mortgaged && meP && meP.position === 0 ? '<button class="risk" onclick="sellChoice(\'' + cityId + '\')">出售</button>' : '')
     + '<button class="textbtn" onclick="closeModal()">关闭</button></div>';
   openModal('地产详情');
