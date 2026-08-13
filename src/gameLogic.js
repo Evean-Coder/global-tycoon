@@ -571,7 +571,7 @@ function startAuction(state, cityId, sellerId, events, rng, extra) {
   }
   // 掷骰定出价顺序（点数高者先）
   const rolls = {};
-  for (const pid of state.pending.order) rolls[pid] = rollDice(rng);
+  for (const pid of state.pending.order) rolls[pid] = rollDice(state, rng);
   state.pending.order.sort((a, b) => rolls[b] - rolls[a]);
   state.phase = 'auction';
   log(events, `${cityLabel(state, cityId)} 进入拍卖，起拍价 ${Math.round(cityTotalValue(state.cities[cityId]) * 0.75)}`, 'auction');
@@ -825,7 +825,7 @@ function apply(state, action, rng) {
 // ---------- 动作实现 ----------
 
 function rollAction(state, p, events, rng) {
-  const roll = rollDice(rng);
+  const roll = rollDice(state, rng);
   state.dice = roll;
   log(events, `${p.name} 掷出 ${roll}`);
   const steps = roll;
@@ -865,7 +865,7 @@ function jailAction(state, p, action, events, rng) {
     return;
   }
   // 掷骰出狱：掷出 1 或 10 出狱并移动
-  const roll = rollDice(rng);
+  const roll = rollDice(state, rng);
   state.dice = roll;
   if (roll === 1 || roll === 10) {
     p.jailed = false;

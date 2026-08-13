@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { createGameState } = require('../src/state');
 const logic = require('../src/gameLogic');
+const { rollDice } = require('../src/random');
 
 function fakeRng(seq) {
   let i = 0;
@@ -11,11 +12,24 @@ function fakeRng(seq) {
 }
 // 按骰子点数生成 rng 序列
 function diceRng(diceList) {
-  return fakeRng(diceList.map((d) => (d - 1 + 0.5) / 10));
+  const f = fakeRng([0.5]);
+  f.diceBag = [...diceList].reverse(); // 预置骰子洗牌袋，pop 顺序即 diceList 顺序
+  return f;
 }
 function twoPlayerState() {
   return createGameState('TEST01', ['甲', '乙']);
 }
+
+test('骰子洗牌袋：每 10 次掷骰 1–10 各出现一次，抽完自动补袋', () => {
+  const state = createGameState('DICE', ['甲']);
+  const rng = fakeRng([0.5]);
+  const first = [];
+  for (let i = 0; i < 10; i++) first.push(rollDice(state, rng));
+  assert.deepStrictEqual([...first].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  const second = [];
+  for (let i = 0; i < 10; i++) second.push(rollDice(state, rng));
+  assert.deepStrictEqual([...second].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
 
 test('购买：落在无主城市进入购买阶段，购买后归属与资金正确', () => {
   const state = twoPlayerState();

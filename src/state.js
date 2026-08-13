@@ -61,6 +61,7 @@ function createGameState(roomCode, playerNames) {
     phase: 'waiting_roll',
     pending: null, // 当前等待决策
     dice: null,
+    diceBag: [], // 骰子洗牌袋（1–10 各一张，抽完重洗）
     rounds: 0,
     rank: [],
     winner: null,

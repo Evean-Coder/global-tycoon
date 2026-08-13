@@ -7,6 +7,13 @@ const logic = require('../src/gameLogic');
 
 const rng = () => 0.5;
 
+// 预置骰子洗牌袋：掷骰必定得到 value
+function rollRng(value) {
+  const f = () => 0.5;
+  f.diceBag = [value];
+  return f;
+}
+
 function setup() {
   const state = createGameState('T', ['甲', '乙']);
   return state;
@@ -20,8 +27,8 @@ test('经过自己城市进入 build_decide，可建房', () => {
   s.cities['罗马'].ownerId = p.id;
   p.cities.push('罗马');
   p.position = 10;
-  // 掷骰落 12：单骰 1–10，rng=0.15 → 掷出 2 → 12
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15);
+  // 掷骰落 12：洗牌袋预置 2 → 12
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2));
   assert.strictEqual(p.position, 12);
   assert.strictEqual(s.phase, 'build_decide');
   assert.strictEqual(s.pending.cityId, '罗马');
@@ -42,7 +49,7 @@ test('build_decide 可拆房并返还 36%', () => {
   s.cities['罗马'].houseLevel = 2;
   p.cities.push('罗马');
   p.position = 10;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15);
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2));
   assert.strictEqual(s.phase, 'build_decide');
   const cashBefore = p.cash;
   logic.apply(s, { type: 'respond_build', decision: 'demolish' }, rng);
@@ -57,7 +64,7 @@ test('build_decide 放弃则直接结束回合', () => {
   s.cities['罗马'].ownerId = p.id;
   p.cities.push('罗马');
   p.position = 10;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15);
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2));
   assert.strictEqual(s.phase, 'build_decide');
   logic.apply(s, { type: 'respond_build', decision: 'pass' }, rng);
   assert.strictEqual(s.cities['罗马'].houseLevel, 0);
@@ -72,7 +79,7 @@ test('空地皮且现金不足建房时经过自己城市直接结束（无弹�
   p.cities.push('罗马');
   p.cash = 1000; // 不足 7200 建房费
   p.position = 10;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15);
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2));
   assert.strictEqual(s.turnIndex, 1, '应直接轮到乙');
 });
 
@@ -85,7 +92,7 @@ test('抵押中的自己城市经过时不进入 build_decide', () => {
   s.cities['罗马'].houseLevel = 1;
   p.cities.push('罗马');
   p.position = 10;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15);
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2));
   assert.strictEqual(s.turnIndex, 1, '抵押中不能建/拆，直接轮到乙');
 });
 
@@ -98,7 +105,7 @@ test('购买资金不足 → 募集资金 → 抵押凑够 → 完成购买', ()
   p.cities.push('巴黎');
   p.cash = 8000; // 罗马 12000 差 4000
   p.position = 10;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15); // 落 12 罗马（无主）
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2)); // 落 12 罗马（无主）
   assert.strictEqual(s.phase, 'buy');
   // 直接点购买（资金不足）→ 自动转募资
   logic.apply(s, { type: 'buy', decision: 'buy' }, rng);
@@ -120,7 +127,7 @@ test('募资后仍不足则无法确认购买，可取消（城市进入拍卖�
   const p = s.players[0];
   p.cash = 5000;
   p.position = 10;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15); // 落 12 罗马
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2)); // 落 12 罗马
   assert.strictEqual(s.phase, 'buy');
   logic.apply(s, { type: 'buy_fundraise', decision: 'start' }, rng);
   assert.strictEqual(s.phase, 'buy_fundraise');
@@ -139,7 +146,7 @@ test('机场购买资金不足 → 募集资金/取消购买', () => {
   const p = s.players[0];
   p.cash = 10000;
   p.position = 4;
-  logic.apply(s, { type: 'roll_dice' }, () => 0.15); // 掷出 2 → 落 6 开罗国际机场
+  logic.apply(s, { type: 'roll_dice' }, rollRng(2)); // 掷出 2 → 落 6 开罗国际机场
   assert.strictEqual(s.phase, 'buy_airport');
   logic.apply(s, { type: 'buy_airport', decision: 'buy' }, rng);
   assert.strictEqual(s.phase, 'buy_fundraise');

@@ -53,7 +53,7 @@
     - 事件记录卡：`#log`（显示所有玩家的完整事件记录）。
     - `.side-ops`：`#btnStock`（股票市场）、`#btnSurrender`（认输）、`#btnDisband`（解散房间）。
 - `#actionBar`（底部操作栏，桌游 HUD 质感）：
-  - `#dice`：骰子显示（单骰 1–10，`骰子 X` 或 `骰子 · 待掷`）。
+  - `#dice`：骰子显示（单骰 1–10 洗牌袋机制，`骰子 X` 或 `骰子 · 待掷`）。
   - `#turnInfo`：当前回合：XX（第 N 轮）。
   - `#btnRoll`（主按钮）掷骰子、`#btnAssets`（次按钮）查看资产、`#btnBank`（次按钮）银行、`#btnEndTurn`（次按钮，非本人回合 disabled）。
   - `#timer`：右下角倒计时（⏱ Ns）。
