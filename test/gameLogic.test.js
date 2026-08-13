@@ -33,7 +33,7 @@ test('骰子洗牌袋：每 10 次掷骰 1–10 各出现一次，抽完自动�
 
 test('购买：落在无主城市进入购买阶段，购买后归属与资金正确', () => {
   const state = twoPlayerState();
-  state.rounds = 2; // 第二轮起才可购买
+  state.firstRoundDone = true; // 第一轮结束后才可购买
   const rng = diceRng([2]); // 掷出 2 → 2 号开普敦（无主）
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.phase, 'buy');
@@ -75,25 +75,45 @@ test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2
 });
 
 
-test('第一轮不能购买城市，第二轮起可购买', () => {
+test('第一轮（所有玩家回到起点一次）结束前不能购买房产和机场', () => {
   const state = twoPlayerState();
   state.players[0].position = 0;
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
-  // 第一轮（rounds=0）落到开普敦（2 号）
+  // 第一轮未结束：落到开普敦（2 号）不进入购买
   let r = logic.apply(state, { type: 'roll_dice' }, diceRng([2]));
   assert.notStrictEqual(state.phase, 'buy'); // 不进入购买
   assert.strictEqual(state.cities['开普敦'].ownerId, null);
   assert.strictEqual(state.turnIndex, 1); // 回合结束，轮到乙
   assert.ok(r.events.some((e) => e.text.includes('第一轮不能购买')));
-  // 第二轮起（rounds=2）可购买
+  // 第一轮未结束：落到机场（6 号开罗国际机场）同样不进入购买
   state.turnIndex = 0;
-  state.rounds = 2;
-  state.players[0].position = 0;
+  state.players[0].position = 5;
   state.phase = 'waiting_roll';
-  r = logic.apply(state, { type: 'roll_dice' }, diceRng([2]));
+  r = logic.apply(state, { type: 'roll_dice' }, diceRng([1]));
+  assert.notStrictEqual(state.phase, 'buy_airport');
+  assert.strictEqual(state.airports['开罗国际机场'].ownerId, null);
+  assert.ok(r.events.some((e) => e.text.includes('第一轮不能购买机场')));
+  // 第一轮结束后可购买
+  state.firstRoundDone = true;
+  state.turnIndex = 0;
+  state.players[0].position = 1;
+  state.phase = 'waiting_roll';
+  r = logic.apply(state, { type: 'roll_dice' }, diceRng([1]));
   assert.strictEqual(state.phase, 'buy');
   assert.strictEqual(state.pending.cityId, '开普敦');
+});
+
+test('第一轮结束：所有玩家回到起点一次后开放购买', () => {
+  const state = twoPlayerState();
+  state.players[0].position = 41; // 甲：掷 1 跨过起点回到 0
+  state.players[0].lapDone = false;
+  state.players[1].lapDone = true; // 乙已完成一圈
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  const r = logic.apply(state, { type: 'roll_dice' }, diceRng([1]));
+  assert.strictEqual(state.firstRoundDone, true);
+  assert.ok(r.events.some((e) => e.text.includes('第一轮结束')));
 });
 
 
@@ -763,7 +783,7 @@ test('监狱：掷出 1 或 10 出狱事件包含具体点数', () => {
 
 test('监狱：双方先后入狱后，狱中玩家掷骰出狱可继续推进', () => {
   const state = twoPlayerState();
-  state.rounds = 2; // 第二轮起，出狱落点可正常结算购买
+  state.firstRoundDone = true; // 第一轮结束后，出狱落点可正常结算购买
   state.players[0].cash = 200000;
   state.players[1].cash = 200000;
   // 甲在狱中：掷 5 失败，轮到乙

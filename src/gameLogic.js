@@ -67,6 +67,10 @@ function maybeRefreshLapLeader(state, events) {
   const alive = state.players.filter((p) => p.alive);
   if (alive.length < 2) return;
   if (!alive.every((p) => p.lapDone)) return;
+  if (!state.firstRoundDone) {
+    state.firstRoundDone = true;
+    log(events, `第一轮结束：所有玩家均已从起点出发回到起点一次，开放购买房产与机场`, 'rule');
+  }
   const vals = alive.map((p) => ({ p, v: totalAssetsOf(state, p) }));
   const maxV = Math.max(...vals.map((a) => a.v));
   const tops = vals.filter((a) => a.v === maxV);
@@ -263,7 +267,7 @@ function resolveLanding(state, sqId, events, rng) {
     case 'chance':
       return resolveChance(state, p, events, rng);
     case 'airport':
-      return resolveAirport(state, p, sq, events);
+      return resolveAirport(state, p, sq, events, rng);
     case 'pole':
       p.frozen = true;
       log(events, `${p.name} 落到${sq.name === '北极' ? '北极' : '南极'}，被冰冻一回合`, 'frozen');
@@ -291,9 +295,9 @@ function resolveLanding(state, sqId, events, rng) {
 function resolveCity(state, player, sq, events, rng) {
   const city = state.cities[sq.cityId];
   if (!city.ownerId) {
-    if (state.rounds < 2) {
-      // 第一轮（所有玩家各自行动一次）不能购买城市
-      log(events, `${player.name} 第一轮不能购买城市，${cityLabel(state, sq.cityId)} 保持无主`, 'buy');
+    if (!state.firstRoundDone) {
+      // 第一轮（每个玩家从起点出发回到起点一次）不能购买房产
+      log(events, `${player.name} 第一轮不能购买房产，${cityLabel(state, sq.cityId)} 保持无主`, 'buy');
       endTurn(state, events, rng);
       return;
     }
@@ -412,9 +416,15 @@ function finishLanding(state, player, events, rng) {
   resolveLanding(state, player.position, events, rng);
 }
 
-function resolveAirport(state, player, sq, events) {
+function resolveAirport(state, player, sq, events, rng) {
   const airport = state.airports[sq.airportId];
   if (!airport.ownerId) {
+    if (!state.firstRoundDone) {
+      // 第一轮（每个玩家从起点出发回到起点一次）不能购买机场
+      log(events, `${player.name} 第一轮不能购买机场，「${sq.airportId}」保持无主`, 'buy_airport');
+      endTurn(state, events, rng);
+      return;
+    }
     state.phase = 'buy_airport';
     state.pending = { playerId: player.id, airportId: sq.airportId, context: null };
     log(events, `${player.name} 经过无主机场「${sq.airportId}」，可选择购买（${AIRPORT_PRICE}）`, 'buy_airport');
