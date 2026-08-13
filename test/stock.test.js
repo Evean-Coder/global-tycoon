@@ -10,7 +10,7 @@ function fakeRng(seq) {
   return () => (i < seq.length ? seq[i++] : 0.5);
 }
 function diceRng(diceList) {
-  return fakeRng(diceList.map((d, i) => (i === 0 ? (d - 1 + 0.5) / 6 : (d - 1 + 0.5) / 3)));
+  return fakeRng(diceList.map((d, i) => (i === 0 ? (d - 1 + 0.5) / 6 : (d - 1 + 0.5) / 4)));
 }
 
 test('股票初始价 = 地价 ÷ 10 × 2；买入受 6 股/3 城/单城 2 股限制（地价≥15000 单次 1 股）', () => {

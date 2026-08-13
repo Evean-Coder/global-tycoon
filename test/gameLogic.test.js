@@ -11,7 +11,7 @@ function fakeRng(seq) {
 }
 // 按骰子点数生成 rng 序列
 function diceRng(diceList) {
-  return fakeRng(diceList.map((d, i) => (i === 0 ? (d - 1 + 0.5) / 6 : (d - 1 + 0.5) / 3)));
+  return fakeRng(diceList.map((d, i) => (i === 0 ? (d - 1 + 0.5) / 6 : (d - 1 + 0.5) / 4)));
 }
 function twoPlayerState() {
   return createGameState('TEST01', ['甲', '乙']);
