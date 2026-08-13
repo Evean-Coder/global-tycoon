@@ -28,6 +28,64 @@ test('购买：落在无主城市进入购买阶段，购买后归属与资金�
   assert.strictEqual(state.players[0].cash, 150000 - 7200);
 });
 
+test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () => {
+  const state = twoPlayerState();
+  state.players[0].cash = 1000000;
+  const cityIds = ['内罗毕', '开普敦', '卡萨布兰卡', '开罗'];
+  for (const cid of cityIds) {
+    state.turnIndex = 0;
+    state.phase = 'buy';
+    state.pending = { playerId: 'p0', cityId: cid, context: null };
+    logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  }
+  assert.strictEqual(state.players[0].lapBuys, 4);
+  // 第 5 座被拒绝
+  state.turnIndex = 0;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '奥克兰', context: null };
+  const cashBefore = state.players[0].cash;
+  const res = logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  assert.strictEqual(state.players[0].cash, cashBefore);
+  assert.strictEqual(state.cities['奥克兰'].ownerId, null);
+  assert.ok(res.events.some((e) => e.text.includes('购买上限')));
+  // 跨过起点重置
+  state.players[0].position = 40;
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 3+3=6 → 46 → 4，跨过起点
+  assert.strictEqual(state.players[0].lapBuys, 0);
+});
+
+
+test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () => {
+  const state = twoPlayerState();
+  state.players[0].cash = 1000000;
+  const cityIds = ['内罗毕', '开普敦', '卡萨布兰卡', '开罗'];
+  for (const cid of cityIds) {
+    state.turnIndex = 0;
+    state.phase = 'buy';
+    state.pending = { playerId: 'p0', cityId: cid, context: null };
+    logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  }
+  assert.strictEqual(state.players[0].lapBuys, 4);
+  // 第 5 座被拒绝
+  state.turnIndex = 0;
+  state.phase = 'buy';
+  state.pending = { playerId: 'p0', cityId: '奥克兰', context: null };
+  const cashBefore = state.players[0].cash;
+  const res = logic.apply(state, { type: 'buy', decision: 'buy' }, fakeRng([0.5]));
+  assert.strictEqual(state.players[0].cash, cashBefore);
+  assert.strictEqual(state.cities['奥克兰'].ownerId, null);
+  assert.ok(res.events.some((e) => e.text.includes('购买上限')));
+  // 跨过起点重置
+  state.players[0].position = 40;
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 3+3=6 → 46 → 4，跨过起点
+  assert.strictEqual(state.players[0].lapBuys, 0);
+});
+
+
 test('收租：路过他人城市支付租金（整数）', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p0';

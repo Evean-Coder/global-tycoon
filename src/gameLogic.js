@@ -853,8 +853,8 @@ function buyAction(state, p, action, events, rng) {
   const pend = state.pending;
   const city = state.cities[pend.cityId];
   if (action.decision === 'buy') {
-    if (p.lapBuys >= 3) {
-      log(events, `${p.name} 本圈（起点到起点）已达购买上限（3 座房产，机场不限）`, 'buy');
+    if (p.lapBuys >= 4) {
+      log(events, `${p.name} 本圈（起点到起点）已达购买上限（4 座房产，机场不限）`, 'buy');
       return;
     }
     if (p.cash < city.price) {
@@ -989,8 +989,8 @@ function buyFundraise(state, p, action, events, rng) {
     if (target.kind === 'city') {
       const city = state.cities[target.cityId];
       if (city.ownerId) { endTurn(state, events, rng); return; }
-      if (p.lapBuys >= 3) {
-        log(events, `${p.name} 本圈（起点到起点）已达购买上限（3 座房产，机场不限）`, 'buy');
+      if (p.lapBuys >= 4) {
+        log(events, `${p.name} 本圈（起点到起点）已达购买上限（4 座房产，机场不限）`, 'buy');
         endTurn(state, events, rng);
         return;
       }

@@ -436,7 +436,7 @@ function renderPending() {
       if (isMe) {
         const city = game.cities[game.pending.cityId];
         const poor = meP.cash < city.price;
-        const lapCap = (meP.lapBuys || 0) >= 3;
+        const lapCap = (meP.lapBuys || 0) >= 4;
         body.innerHTML = '<div class="card-tag">PROPERTY</div>'
           + kv('地产名称', (city.country ? city.country + '·' : '') + game.pending.cityId)
           + kv('当前价格', fmt(city.price), 'g')
@@ -447,7 +447,7 @@ function renderPending() {
             ? '<p class="hint">现金不足，无法直接购买。你可以募集资金（抵押/拆房凑够地价）或取消购买（进入拍卖）。</p>'
               + '<div class="row"><button class="secondary" onclick="emitAct({type:\'buy_fundraise\',decision:\'start\'})">募集资金</button><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">取消购买</button></div>'
             : (lapCap
-              ? '<p class="hint">本圈（起点到起点）已购买 3 座房产，本圈不能再购买城市（机场不限）。</p><div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买（进入拍卖）</button></div>'
+              ? '<p class="hint">本圈（起点到起点）已购买 4 座房产，本圈不能再购买城市（机场不限）。</p><div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买（进入拍卖）</button></div>'
               : '<div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买</button><button class="positive" onclick="emitAct({type:\'buy\',decision:\'buy\'})">确认购买</button></div>'));
         openModal('地产购买');
       }
@@ -814,7 +814,7 @@ function buildRules() {
   $('rulesBody').innerHTML = ''
     + '<p><b>目标：</b>初始资金 150000；购买地产、建设城市、投资股票，坚持到最后获胜。</p>'
     + '<p><b>回合：</b>掷双骰（一个 1–6、一个 1–3；双数连掷、三次双数入狱）；跨过起点 +5000 并触发股息与股票窗口。</p>'
-    + '<p><b>地产：</b>租金 = 地价 ×（30% + 房屋等级 × 30%）；经过自有城可建/拆 1 级；每圈（起点到起点）最多购买 3 座城市（机场不限）。</p>'
+    + '<p><b>地产：</b>租金 = 地价 ×（30% + 房屋等级 × 30%）；经过自有城可建/拆 1 级；每圈（起点到起点）最多购买 4 座城市（机场不限）。</p>'
     + '<p><b>城市交易：</b>直接出售（总价值成交、卖家得 80%）或拍卖（起拍 75%、加价至少 1000）。</p>'
     + '<p><b>抵押：</b>总价值 × 50%，最多 2 座，每轮 5% 利息。</p>'
     + '<p><b>机场：</b>15000 购买，机场费 3000×拥有数，机票 = 距离 × 500。</p>'
