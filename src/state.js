@@ -22,6 +22,7 @@ function createPlayer(name, seat, id) {
     airports: [],
     stocks: {}, // cityId -> shares
     lapBuys: 0, // 一圈（起点到起点）内购买城市数
+    lapDone: false, // 本圈是否已经过起点
     connected: true,
     reconnectToken: null,
   };
@@ -55,6 +56,7 @@ function createGameState(roomCode, playerNames) {
     airports,
     stocks,
     chanceDeck: buildChanceDeck(),
+    lapLeaderId: null, // 本圈资产最高者（所有存活玩家都经过一次起点后锁定）
     turnIndex: 0,
     phase: 'waiting_roll',
     pending: null, // 当前等待决策

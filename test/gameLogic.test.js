@@ -28,12 +28,20 @@ test('购买：落在无主城市进入购买阶段，购买后归属与资金�
   assert.strictEqual(state.players[0].cash, 150000 - 7200);
 });
 
-test('领先者限购：资产最高者每圈最多购买 2 座城市', () => {
+test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2 座', () => {
   const state = twoPlayerState();
   state.players[0].cash = 1000000;
-  state.players[1].cash = 10000; // 甲资产最高
-  const cityIds = ['内罗毕', '开普敦'];
-  for (const cid of cityIds) {
+  state.players[1].cash = 10000;
+  state.players[0].lapDone = true;
+  state.players[1].lapDone = true;
+  state.players[0].position = 40;
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 40+6=46 → 4，跨过起点
+  assert.strictEqual(state.lapLeaderId, 'p0'); // 甲资产最高，锁定为本圈领先者
+  assert.strictEqual(state.players[0].lapDone, false); // 快照后重置
+  // 甲（领先者）每圈限购 2 座
+  for (const cid of ['内罗毕', '开普敦']) {
     state.turnIndex = 0;
     state.phase = 'buy';
     state.pending = { playerId: 'p0', cityId: cid, context: null };
@@ -82,12 +90,20 @@ test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () =>
 });
 
 
-test('领先者限购：资产最高者每圈最多购买 2 座城市', () => {
+test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2 座', () => {
   const state = twoPlayerState();
   state.players[0].cash = 1000000;
-  state.players[1].cash = 10000; // 甲资产最高
-  const cityIds = ['内罗毕', '开普敦'];
-  for (const cid of cityIds) {
+  state.players[1].cash = 10000;
+  state.players[0].lapDone = true;
+  state.players[1].lapDone = true;
+  state.players[0].position = 40;
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 40+6=46 → 4，跨过起点
+  assert.strictEqual(state.lapLeaderId, 'p0'); // 甲资产最高，锁定为本圈领先者
+  assert.strictEqual(state.players[0].lapDone, false); // 快照后重置
+  // 甲（领先者）每圈限购 2 座
+  for (const cid of ['内罗毕', '开普敦']) {
     state.turnIndex = 0;
     state.phase = 'buy';
     state.pending = { playerId: 'p0', cityId: cid, context: null };

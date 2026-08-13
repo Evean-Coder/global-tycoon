@@ -62,17 +62,25 @@ function totalAssetsOf(state, p) {
   return v;
 }
 
-// 资产最高者判定（唯一最高才视为领先者）与每圈限购数
-function isTopAsset(state, p) {
-  const alive = state.players.filter((x) => x.alive);
-  if (alive.length < 2) return false;
-  const vals = alive.map((x) => ({ p: x, v: totalAssetsOf(state, x) }));
+// 圈领先者：所有存活玩家都经过一次起点后，锁定资产最高者为本圈限购对象
+function maybeRefreshLapLeader(state, events) {
+  const alive = state.players.filter((p) => p.alive);
+  if (alive.length < 2) return;
+  if (!alive.every((p) => p.lapDone)) return;
+  const vals = alive.map((p) => ({ p, v: totalAssetsOf(state, p) }));
   const maxV = Math.max(...vals.map((a) => a.v));
   const tops = vals.filter((a) => a.v === maxV);
-  return tops.length === 1 && tops[0].p.id === p.id;
+  state.lapLeaderId = tops.length === 1 ? tops[0].p.id : null;
+  for (const p of alive) p.lapDone = false;
+  if (state.lapLeaderId) {
+    const leader = playerById(state, state.lapLeaderId);
+    log(events, `${leader.name} 成为本圈资产最高者（每圈限购 2 座城市）`, 'rule');
+  }
 }
 function lapCapFor(state, p) {
-  return isTopAsset(state, p) ? LAP_CAP_LEADER : LAP_CAP_NORMAL;
+  const leader = state.lapLeaderId ? playerById(state, state.lapLeaderId) : null;
+  if (leader && leader.alive && leader.id === p.id) return LAP_CAP_LEADER;
+  return LAP_CAP_NORMAL;
 }
 
 function refundFor(city) {
@@ -211,6 +219,8 @@ function advanceTurn(state, events, rng) {
 function settleGo(state, player, events) {
   player.cash += GO_BONUS;
   player.lapBuys = 0; // 回到起点重置本圈购买次数
+  player.lapDone = true; // 本圈已过起点
+  maybeRefreshLapLeader(state, events);
   log(events, `${player.name} 跨过/停在起点，获得 ${GO_BONUS}`);
   // 名下城市股息
   for (const cityId of player.cities) {
@@ -835,6 +845,8 @@ function rollAction(state, p, events, rng) {
       openStockWindow(state, p, events, 'land');
     } else {
       p.lapBuys = 0; // 停在起点同样重置本圈购买次数
+      p.lapDone = true;
+      maybeRefreshLapLeader(state, events);
       openStockWindow(state, p, events, 'end');
     }
   } else {
@@ -876,6 +888,8 @@ function jailAction(state, p, action, events, rng) {
     }
     if (p.position === GO) {
       p.lapBuys = 0; // 停在起点重置本圈购买次数
+      p.lapDone = true;
+      maybeRefreshLapLeader(state, events);
       openStockWindow(state, p, events, 'end');
       return;
     }
@@ -904,7 +918,7 @@ function buyAction(state, p, action, events, rng) {
   const city = state.cities[pend.cityId];
   if (action.decision === 'buy') {
     if (p.lapBuys >= lapCapFor(state, p)) {
-      log(events, `${p.name} 本圈（起点到起点）已达购买上限（${lapCapFor(state, p)} 座房产，机场不限${isTopAsset(state, p) ? '；资产最高者限购 2 座' : ''}）`, 'buy');
+      log(events, `${p.name} 本圈（起点到起点）已达购买上限（${lapCapFor(state, p)} 座房产，机场不限${lapCapFor(state, p) === 2 ? '；本圈资产最高者限购 2 座' : ''}）`, 'buy');
       return;
     }
     if (p.cash < city.price) {
