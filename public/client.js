@@ -524,6 +524,7 @@ function renderPending() {
     case 'stock':
       if (isMe && !stockAutoShown) {
         stockAutoShown = true;
+        closeModal(); // 关闭机会卡等上一弹窗，避免残留
         renderStock();
         $('stockModal').classList.remove('hidden');
       }
