@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>环球大亨 · 资本博弈</title>
+  <link rel="stylesheet" href="style.css?v=20260813af" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>环球大亨｜资本博弈</h1>
+      <span class="sub">GLOBAL TYCOON</span>
+    </div>
+    <button id="btnRules" class="ghost">规则速查</button>
+  </header>
+
+  <!-- 大厅 -->
+  <section id="view-lobby" class="view">
+    <div class="card center">
+      <div class="brand-mark">
+        <div class="t serif">环球大亨</div>
+        <div class="s">GLOBAL TYCOON · 资本博弈</div>
+      </div>
+      <div class="rule"></div>
+      <div class="field">
+        <label>玩家昵称</label>
+        <input id="nickname" maxlength="12" placeholder="请输入你的昵称" />
+      </div>
+      <button id="btnCreate" class="primary block" disabled>创建房间</button>
+      <div class="rule"></div>
+      <div class="field">
+        <label>输入房间码加入对局</label>
+        <div class="row">
+          <input id="joinCode" class="mono" maxlength="6" placeholder="000000" />
+          <button id="btnJoin" class="secondary" style="width:118px;flex:none" disabled>加入房间</button>
+        </div>
+      </div>
+      <p class="hint center">创建房间后可邀请好友输入房间码加入游戏</p>
+    </div>
+  </section>
+
+  <!-- 房间 -->
+  <section id="view-room" class="view hidden">
+    <div class="card center">
+      <h2>房间</h2>
+      <div class="codebox">
+        <label>房间编号</label>
+        <div class="row">
+          <span id="roomCode" class="mono big"></span>
+          <button id="btnCopyCode" class="textbtn">复制房间码</button>
+        </div>
+      </div>
+      <div class="rule"></div>
+      <div class="field">
+        <label>玩家列表</label>
+        <ul id="playerList" class="players"></ul>
+      </div>
+      <div class="rule"></div>
+      <button id="btnStart" class="primary block" disabled>开始游戏</button>
+      <button id="btnLeave" class="secondary block">退出房间</button>
+      <p id="roomHint" class="hint center"></p>
+    </div>
+  </section>
+
+  <!-- 游戏 -->
+  <section id="view-game" class="view hidden">
+    <div id="waitBanner" class="hidden"></div>
+    <div id="gameMain">
+      <div id="boardWrap">
+        <div id="boardScale">
+          <div id="board"></div>
+        <div id="pieces"></div>
+        </div>
+        <div id="ledger"><div id="ledgerBody"></div></div>
+      </div>
+      <div id="side">
+        <div class="panel" id="sidePlayer"></div>
+        <div class="panel" id="sideOthers"></div>
+        <div class="panel">
+          <h3>事件记录</h3>
+          <div id="log"></div>
+        </div>
+        <div class="side-ops">
+          <button id="btnStock" class="secondary">股票市场</button>
+          <button id="btnSurrender" class="risk">认输</button>
+          <button id="btnDisband" class="risk">解散房间</button>
+        </div>
+      </div>
+    </div>
+    <div id="actionBar">
+      <div id="dice">骰子 · 待掷</div>
+      <span id="turnInfo" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="btnRoll" class="primary">掷骰子</button>
+      <button id="btnAssets" class="secondary">查看资产</button>
+      <button id="btnBank" class="secondary">银行</button>
+      <button id="btnEndTurn" class="secondary" disabled>结束回合</button>
+      <span id="timer" class="muted"></span>
+    </div>
+  </section>
+
+  <!-- 通用操作弹窗 -->
+  <div id="modal" class="overlay hidden">
+    <div class="modal">
+      <div class="mh"><h3 id="modalTitle"></h3></div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- 股票市场 -->
+  <div id="stockModal" class="overlay hidden">
+    <div class="modal wide">
+      <div class="mh"><h3>股票市场</h3><p id="stockHint" class="hint"></p></div>
+      <div id="stockList"></div>
+      <div id="transferBox" class="hidden">
+        <div class="rule"></div>
+        <div class="card-tag">STOCK TRANSFER</div>
+        <label>转让给</label>
+        <select id="transferTarget" class="mono"></select>
+        <div id="transferList"></div>
+        <label>附带现金</label>
+        <input id="transferCash" type="number" min="0" value="0" class="mono" />
+        <button id="btnTransfer" class="secondary">发起转让</button>
+      </div>
+      <div class="mf">
+        <button id="btnStockSkip" class="secondary">不交易，继续</button>
+        <button id="btnStockConfirm" class="primary">确认交易</button>
+        <button id="btnStockClose" class="textbtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 规则速查 -->
+  <div id="rulesModal" class="overlay hidden">
+    <div class="modal wide">
+      <div class="mh"><h3>规则速查</h3></div>
+      <div id="rulesBody"></div>
+      <div class="mf"><button id="btnRulesClose" class="primary">关闭</button></div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js?v=20260813af"></script>
+</body>
+</html>

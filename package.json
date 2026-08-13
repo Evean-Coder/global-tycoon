@@ -1,0 +1,20 @@
+{
+  "name": "global-tycoon",
+  "version": "0.1.0",
+  "description": "环球大亨 - 大富翁联机游戏",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

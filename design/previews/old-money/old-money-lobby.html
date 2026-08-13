@@ -1,0 +1,155 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>老钱风预览</title><style>
+:root{
+  --bg:#1A1410; --card:#29201A; --card2:#382C24;
+  --gold:#B89B68; --gold2:#8A7250; --text:#D9D1C7; --muted:#94867B; --off:#6B5D54;
+  --danger:#C74F4F; --success:#8FB88A;
+  --line:rgba(138,114,80,.55); --line-soft:rgba(138,114,80,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  background-color:var(--bg);
+  background-image:radial-gradient(1100px 500px at 15% -10%,rgba(184,155,104,.05),transparent 60%),radial-gradient(900px 480px at 110% 10%,rgba(120,95,60,.05),transparent 60%);
+  color:var(--text);min-height:100vh;
+}
+.mono{font-family:"Consolas","Courier New",monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:Georgia,"Songti SC","STSong","Times New Roman",serif}
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 28px;background:linear-gradient(180deg,#211A14,#1A1410);
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:baseline;gap:14px}
+.brand h1{font-family:Georgia,"Songti SC","STSong",serif;font-size:24px;letter-spacing:6px;color:var(--gold);font-weight:700}
+.brand .sub{font-size:10px;letter-spacing:5px;color:var(--gold2);text-transform:uppercase;border-left:1px solid var(--line);padding-left:14px}
+.head-note{font-size:11px;color:var(--muted);letter-spacing:2px}
+button{
+  padding:0 20px;height:44px;border-radius:6px;border:1px solid transparent;
+  background:var(--card2);color:var(--text);cursor:pointer;
+  font-family:"Segoe UI","Microsoft YaHei",sans-serif;font-size:14px;letter-spacing:1px;
+}
+button.primary{background:var(--gold);color:#1A1410;font-weight:700}
+button.primary:hover{background:#C4A87A}
+button.secondary{background:var(--card);border-color:var(--gold2);color:var(--gold)}
+button.danger{background:var(--danger);color:#F4E5E3}
+button.ghost{background:transparent;color:var(--gold)}
+button.textbtn{background:none;border:none;padding:4px;color:var(--gold);text-decoration:underline;font-size:13px;height:auto;cursor:pointer}
+button:disabled{background:var(--card2);color:var(--off);border-color:transparent;cursor:not-allowed}
+input{
+  height:48px;padding:0 14px;border-radius:6px;border:1px solid var(--gold2);
+  background:var(--card2);color:var(--text);font-size:15px;width:100%;
+  font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+}
+input.mono{font-family:"Consolas","Courier New",monospace;letter-spacing:4px}
+input:focus{outline:none;border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold),0 0 0 3px rgba(184,155,104,.12)}
+label{font-size:12px;color:var(--muted);letter-spacing:2px;display:block;margin-bottom:6px}
+.view{max-width:1180px;margin:0 auto;padding:22px}
+.hidden{display:none}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:8px;padding:28px;
+  box-shadow:0 16px 44px rgba(0,0,0,.42),inset 0 1px 0 rgba(217,209,199,.05);
+}
+.card.center{max-width:460px;margin:8vh auto}
+.card h2,.card h3{font-family:Georgia,"Songti SC","STSong",serif;letter-spacing:3px;color:var(--gold)}
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--gold2),transparent);margin:18px 0}
+.hint{font-size:12px;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;letter-spacing:1px}
+.badge.host{color:var(--gold);border:1px solid var(--gold2);background:rgba(184,155,104,.12)}
+.badge.off{color:var(--off);border:1px solid var(--off);background:rgba(107,93,84,.12)}
+.badge.bankrupt{color:#D89A9A;border:1px solid rgba(199,79,79,.5);background:rgba(199,79,79,.10)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot.on{background:var(--success)}
+.dot.off{background:var(--off)}
+
+/* ---------- 游戏页 ---------- */
+#gameView{max-width:1280px;margin:0 auto;padding:16px 22px}
+#gameTop{display:flex;align-items:center;gap:26px;padding:10px 14px;border:1px solid var(--line-soft);border-radius:6px;background:rgba(41,32,26,.65);margin-bottom:14px}
+#gameTop .dice{font-size:24px;color:var(--gold);font-family:Georgia,serif}
+#gameTop .turn{font-size:14px;color:var(--text)}
+#gameTop .turn b{color:var(--gold)}
+#gameTop .timer{margin-left:auto;font-size:14px;color:var(--muted);letter-spacing:1px}
+#gameMain{display:flex;gap:16px;align-items:flex-start}
+#boardWrap{flex:1;min-width:0;display:flex;justify-content:center}
+#board{
+  display:grid;grid-template-columns:repeat(12,1fr);gap:4px;width:100%;max-width:930px;padding:12px;
+  border:1px solid var(--line);border-radius:8px;
+  background:
+    repeating-linear-gradient(0deg,rgba(138,114,80,.045) 0 1px,transparent 1px 26px),
+    repeating-linear-gradient(90deg,rgba(138,114,80,.035) 0 1px,transparent 1px 26px),
+    linear-gradient(180deg,#231C15,#1E1812);
+  box-shadow:0 14px 40px rgba(0,0,0,.5),inset 0 0 60px rgba(0,0,0,.35);
+}
+.sq{
+  min-height:70px;border-radius:4px;padding:4px 3px;position:relative;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  text-align:center;font-size:11px;line-height:1.25;color:var(--text);
+  border:1px solid rgba(138,114,80,.32);
+  background:rgba(46,37,29,.72);
+}
+.sq .num{position:absolute;top:2px;left:4px;font-size:8px;color:var(--off);font-family:"Consolas",monospace}
+.sq .nm{font-size:10px;letter-spacing:.3px}
+.sq .own{font-size:9px;color:var(--gold);margin-top:1px}
+.sq .mark{position:absolute;bottom:2px;right:4px;font-size:9px}
+.sq .mark.h{color:var(--gold)}
+.sq .mark.m{color:var(--danger)}
+.g-黄{background:linear-gradient(180deg,rgba(150,126,84,.28),rgba(150,126,84,.10));border-top:2px solid rgba(184,155,104,.75)}
+.g-紫{background:linear-gradient(180deg,rgba(122,102,150,.26),rgba(122,102,150,.08));border-top:2px solid rgba(150,126,180,.7)}
+.g-绿{background:linear-gradient(180deg,rgba(108,130,102,.26),rgba(108,130,102,.08));border-top:2px solid rgba(143,184,138,.7)}
+.g-蓝{background:linear-gradient(180deg,rgba(96,118,146,.26),rgba(96,118,146,.08));border-top:2px solid rgba(116,142,174,.7)}
+.g-红{background:linear-gradient(180deg,rgba(146,88,80,.26),rgba(146,88,80,.08));border-top:2px solid rgba(199,120,110,.7)}
+.t-start{background:linear-gradient(180deg,rgba(74,107,82,.4),rgba(52,80,60,.2));border-top:2px solid rgba(143,184,138,.8)}
+.t-chance{background:linear-gradient(180deg,rgba(146,108,64,.3),rgba(146,108,64,.1));border-top:2px solid rgba(184,146,96,.75)}
+.t-airport{background:linear-gradient(180deg,rgba(88,96,104,.3),rgba(88,96,104,.1));border-top:2px solid rgba(148,158,168,.6)}
+.t-jail{background:linear-gradient(180deg,rgba(40,36,32,.9),rgba(30,27,24,.9));border-top:2px solid rgba(138,114,80,.4)}
+.t-pole{background:linear-gradient(180deg,rgba(70,110,128,.32),rgba(70,110,128,.1));border-top:2px solid rgba(120,170,196,.7)}
+.t-rest{background:rgba(38,31,25,.55)}
+.token{display:inline-block;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#E8E3D8,#9C948A 55%,#4C463E);box-shadow:0 1px 2px rgba(0,0,0,.5);margin:0 1px}
+#side{width:340px;flex:none;display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px}
+.panel h3{font-family:Georgia,"Songti SC","STSong",serif;font-size:14px;letter-spacing:3px;color:var(--gold);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line-soft)}
+.pinfo{display:flex;align-items:center;gap:8px;font-size:14px}
+.pinfo b{color:var(--text)}
+.assets{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.asset-row{display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}
+.asset-row b{color:var(--text);font-family:"Consolas","Courier New",monospace}
+.asset-row .total{color:var(--gold);font-size:16px}
+.asset-row .neg{color:var(--danger)}
+.ev{margin-top:10px}
+.ev .item{padding:7px 0;border-bottom:1px dashed var(--line-soft);font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:baseline}
+.ev .item .t{color:var(--gold2);font-size:11px;letter-spacing:1px;white-space:nowrap}
+.ev .item.cur{color:var(--text)}
+#actionBar{margin-top:14px;display:flex;gap:12px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:8px;background:rgba(41,32,26,.75)}
+#actionBar .spacer{flex:1}
+#actionBar button{height:48px;min-width:140px}
+
+/* ---------- 弹窗 ---------- */
+.overlay{position:fixed;inset:0;background:rgba(10,7,5,.68);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:60;padding:24px}
+.modal{width:100%;max-width:430px;background:var(--card);border:1px solid var(--gold2);border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.6),inset 0 1px 0 rgba(217,209,199,.05)}
+.modal .mh{padding:18px 22px 0}
+.modal .mh h3{font-family:Georgia,"Songti SC","STSong",serif;font-size:18px;letter-spacing:4px;color:var(--gold)}
+.modal .mb{padding:16px 22px}
+.modal .mf{padding:0 22px 20px;display:flex;gap:10px;justify-content:flex-end}
+.modal .mf button{height:46px;min-width:110px}
+.kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line-soft);font-size:14px;color:var(--muted)}
+.kv b{color:var(--text);font-family:"Consolas","Courier New",monospace}
+.kv .g{color:var(--gold)}
+.kv .r{color:var(--danger)}
+.card-tag{font-size:12px;color:var(--muted);letter-spacing:2px;margin-bottom:6px}
+.rank{width:100%;border-collapse:collapse;font-size:14px}
+.rank th{font-size:11px;color:var(--muted);letter-spacing:2px;text-align:left;padding:8px 6px;border-bottom:1px solid var(--line-soft);font-weight:400}
+.rank td{padding:9px 6px;border-bottom:1px dashed var(--line-soft);color:var(--muted)}
+.rank td:last-child,.rank th:last-child{text-align:right}
+.rank .mono{color:var(--text)}
+.rank tr.r1 td{color:var(--gold)}
+.rank tr.r1 .mono{color:var(--gold)}
+.rank tr.r2 td{color:var(--text)}
+.rank tr.r3 td{color:var(--muted)}
+.rank tr.rb td{color:#9A7F7B}
+.winner-box{text-align:center;padding:14px 0 6px}
+.winner-box .cap{font-size:11px;letter-spacing:6px;color:var(--gold2);text-transform:uppercase}
+.winner-box .name{font-family:Georgia,"Songti SC","STSong",serif;font-size:34px;letter-spacing:6px;color:var(--gold);margin-top:8px}
+.winner-box .total{font-family:"Consolas","Courier New",monospace;font-size:16px;color:var(--text);margin-top:6px}
+.seal{display:inline-block;margin-top:12px;border:2px solid var(--gold2);color:var(--gold2);border-radius:4px;padding:4px 10px;font-size:11px;letter-spacing:3px;transform:rotate(-4deg)}
+</style></head><body><header><div class="brand"><h1>环球大亨｜资本博弈</h1><span class="sub">GLOBAL TYCOON</span></div><span class="head-note">规则速查</span></header><div class="view"><div class="card center"><div style="text-align:center"><div class="serif" style="font-size:30px;letter-spacing:8px;color:var(--gold)">环球大亨</div><div style="font-size:12px;letter-spacing:6px;color:var(--gold2);margin-top:6px">GLOBAL TYCOON · 资本博弈</div></div><div class="divider"></div><div class="hint" style="text-align:center;margin-bottom:4px">老牌资本局，欢迎入座</div><div><label>玩家昵称</label><input placeholder="请输入你的昵称" value="玩家A"></div><button class="primary" style="height:52px">创建房间</button><div class="divider"></div><div><label>输入房间码加入对局</label><div class="row"><input class="mono" maxlength="6" placeholder="000000" value="358959"><button class="secondary" style="width:120px;flex:none">加入</button></div></div><p class="hint" style="text-align:center;margin-top:6px">创建房间后可邀请好友输入房间码加入游戏</p></div></div></body></html>
