@@ -1170,11 +1170,20 @@ function stockTrade(state, p, orders, events) {
   if (!orders || !orders.length) return;
   const buys = orders.filter((o) => o.side === 'buy');
   const totalBuyShares = buys.reduce((s, o) => s + o.shares, 0);
-  if (buys.length > 3 || totalBuyShares > 6) return;
+  if (buys.length > 3 || totalBuyShares > 6) {
+    log(events, `${p.name} 股票交易未生效：买入最多 3 城、合计 6 股`, 'stock');
+    return;
+  }
   for (const o of buys) {
-    if (o.shares > 2) return;
+    if (o.shares > 2) {
+      log(events, `${p.name} 股票交易未生效：单城最多买 2 股`, 'stock');
+      return;
+    }
     const city = state.cities[o.cityId];
-    if (city.ownerId === p.id && sharesOf(state, p.id, o.cityId) + o.shares > 1) return;
+    if (city.ownerId === p.id && sharesOf(state, p.id, o.cityId) + o.shares > 1) {
+      log(events, `${p.name} 股票交易未生效：城市所有者最多持有 1 股`, 'stock');
+      return;
+    }
   }
   let cost = 0, proceeds = 0;
   for (const o of orders) {
@@ -1183,7 +1192,10 @@ function stockTrade(state, p, orders, events) {
     if (o.side === 'buy') cost += shares * st.price;
     else proceeds += Math.min(shares, st.holders[p.id] || 0) * st.price;
   }
-  if (cost > p.cash + proceeds) return;
+  if (cost > p.cash + proceeds) {
+    log(events, `${p.name} 股票交易未生效：现金不足`, 'stock');
+    return;
+  }
   for (const o of orders) {
     const st = state.stocks[o.cityId];
     const shares = Math.abs(o.shares);

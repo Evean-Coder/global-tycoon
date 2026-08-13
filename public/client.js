@@ -415,7 +415,7 @@ function renderPending() {
     case 'jail_turn':
       if (isMe) {
         const canPayJ = meP.cash >= 15000;
-        body.innerHTML = '<p>你被关押在监狱。</p>'
+        body.innerHTML = '<p>你被关押在监狱。</p><p class="hint">掷出对子（两个骰子点数相同，如 3+3、6+6）即可出狱；非对子记一回合。出狱费 15000 可提前出狱（非强制）。</p>'
           + (canPayJ ? '' : '<p class="hint">资金不足（当前 ' + fmt(meP.cash) + '），可先募集资金。</p>')
           + '<div class="btnrow"><button class="primary" ' + (canPayJ ? '' : 'disabled') + ' onclick="emitAct({type:\'respond_jail\',decision:\'pay\'})">支付 15000 出狱</button>'
           + '<button class="secondary" onclick="emitAct({type:\'respond_jail\',decision:\'roll\'})">掷骰试出狱</button>'
@@ -863,6 +863,17 @@ function submitStock() {
   const total = buys.reduce((s, o) => s + o.shares, 0);
   if (buys.length > 3 || total > 6) { toast('买入最多 3 城、合计 6 股、单城 2 股'); return; }
   for (const o of buys) if (o.shares > 2) { toast('单城最多买 2 股'); return; }
+  const meP = game.players.find((p) => p.id === me.gameId);
+  if (meP) {
+    let cost = 0, proceeds = 0;
+    for (const o of orders) {
+      const st = game.stocks[o.cityId];
+      const shares = Math.abs(o.shares);
+      if (o.side === 'buy') cost += shares * st.price;
+      else proceeds += Math.min(shares, meP.stocks[o.cityId] || 0) * st.price;
+    }
+    if (cost > meP.cash + proceeds) { toast('现金不足，无法完成购买'); return; }
+  }
   socket.emit('action', { type: 'stock_trade', orders });
   socket.emit('action', { type: 'stock_done' });
   stockDraft = {};

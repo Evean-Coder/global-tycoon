@@ -346,23 +346,20 @@ test('股票：买卖与未交易均有事件记录', () => {
 });
 
 
-test('股票：买卖与未交易均有事件记录', () => {
+
+
+
+test('股票：现金不足时交易未生效并记录原因', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p1';
-  state.stocks['开罗'].price = 600; // 开罗地价 6000/10
-  state.players[0].cash = 100000;
+  state.stocks['开罗'].price = 600;
+  state.players[0].cash = 100;
   state.phase = 'stock';
   state.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
   const res = logic.apply(state, { type: 'stock_trade', orders: [{ cityId: '开罗', side: 'buy', shares: 2 }] }, fakeRng([0.5]));
-  assert.strictEqual(res.rejected, undefined);
-  assert.ok(res.events.some((e) => e.type === 'stock' && e.text.includes('购买 埃及·开罗 股份 ×2（1200）')));
-  // 未交易也有记录
-  const s2 = twoPlayerState();
-  s2.cities['开罗'].ownerId = 'p1';
-  s2.phase = 'stock';
-  s2.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
-  const res2 = logic.apply(s2, { type: 'stock_done' }, fakeRng([0.5]));
-  assert.ok(res2.events.some((e) => e.type === 'stock' && e.text.includes('未进行股票交易')));
+  assert.strictEqual(state.players[0].cash, 100); // 交易未生效
+  assert.strictEqual(state.stocks['开罗'].holders['p0'] || 0, 0);
+  assert.ok(res.events.some((e) => e.type === 'stock' && e.text.includes('现金不足')));
 });
 
 
