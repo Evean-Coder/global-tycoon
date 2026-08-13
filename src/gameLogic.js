@@ -47,7 +47,9 @@ function cityTotalValue(city) {
 }
 
 function rentFor(city) {
-  return city.price * (0.3 + 0.3 * city.houseLevel);
+  let rent = city.price * (0.3 + 0.3 * city.houseLevel);
+  if (city.houseLevel >= 4 && city.price >= 15000) rent *= 1.1; // 高价城满级租金 +10%
+  return Math.round(rent);
 }
 
 function totalAssetsOf(state, p) {

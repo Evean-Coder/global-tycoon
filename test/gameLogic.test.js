@@ -86,6 +86,25 @@ test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () =>
 });
 
 
+test('高价城满级租金额外加成：地价≥15000 满级 +10%', () => {
+  const state = twoPlayerState();
+  state.cities['上海'].ownerId = 'p0'; // 地价 20000
+  state.cities['上海'].houseLevel = 4;
+  state.players[0].cities.push('上海');
+  state.turnIndex = 1;
+  state.phase = 'waiting_roll';
+  state.players[1].position = 34;
+  logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1])); // 34+2=36 上海
+  // 20000 × 150% × 110% = 33000
+  assert.strictEqual(state.players[1].cash, 150000 - 33000);
+  assert.strictEqual(state.players[0].cash, 150000 + 33000);
+  // 低价城（<15000）满级无加成：3600 × 150% = 5400
+  const s2 = twoPlayerState();
+  s2.cities['内罗毕'].houseLevel = 4;
+  assert.strictEqual(logic.rentFor(s2.cities['内罗毕']), 5400);
+});
+
+
 test('收租：路过他人城市支付租金（整数）', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p0';
