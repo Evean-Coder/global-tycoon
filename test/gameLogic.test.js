@@ -234,7 +234,7 @@ test('破产：拍卖中另一玩家出价获得后结算胜负', () => {
   assert.strictEqual(state.status, 'over');
   assert.strictEqual(state.winner, 'p1');
   assert.strictEqual(state.cities['开罗'].ownerId, 'p1');
-  assert.strictEqual(state.players[1].cash, 150000 + 5000 - 4500); // 破产救济金 5000 + 拍得开罗
+  assert.strictEqual(state.players[1].cash, 150000 - 4500); // 2 人局幸存者即资产最高者，无救济金
 });
 
 test('破产：押质城市归银行不进拍卖', () => {
@@ -298,15 +298,18 @@ test('自救：抵押凑够金额自动结束自救，未凑够留在自救界�
 });
 
 
-test('破产救济金：破产后其余玩家各获得 5000', () => {
-  const state = twoPlayerState();
+test('破产救济金：仅破产时发放，总额 15000 分给资产最高者之外的存活玩家', () => {
+  const state = createGameState('TEST03', ['甲', '乙', '丙']);
   state.players[0].cash = -50000;
+  state.players[1].cash = 200000;
+  state.players[2].cash = 50000;
   state.phase = 'self_rescue';
   state.pending = { playerId: 'p0', kind: 'self_rescue', due: 50000, reason: '租金', resume: false };
   logic.apply(state, { type: 'rescue_done' }, fakeRng([0.5]));
-  assert.strictEqual(state.status, 'over');
-  assert.strictEqual(state.winner, 'p1');
-  assert.strictEqual(state.players[1].cash, 150000 + 5000);
+  // 乙资产最高不发放；丙获得全部 15000
+  assert.strictEqual(state.players[1].cash, 200000);
+  assert.strictEqual(state.players[2].cash, 50000 + 15000);
+  assert.ok(state.rank.includes('p0'));
 });
 
 
