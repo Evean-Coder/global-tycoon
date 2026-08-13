@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const { createGameState, snapshot, resetDeck } = require('./src/state');
 const logic = require('./src/gameLogic');
 const { createRng } = require('./src/random');
+const { buildGameRecord } = require('./src/record');
 
 const PORT = process.env.PORT || 3000;
 const MAIN_TIMEOUT = 90 * 1000;
@@ -51,6 +52,8 @@ function makeRoom(hostSocket, name) {
     lastEvents: [], // 最近一次动作的事件日志（仅用于前端展示）
     eventSeq: 0, // 事件全局序号（用于前端去重与排序）
     lastEventBase: 0,
+    events: [], // 完整对局事件流水（用于生成对局数据记录）
+    gameRecord: null, // 已生成的对局记录（防重复）
   };
   issueToken(hostSocket, room.players[0]);
   rooms.set(code, room);
@@ -73,6 +76,7 @@ function emitRoom(room) {
 
 function emitGame(room) {
   if (!room.state) return;
+  if (room.state.phase === 'game_over' && !room.gameRecord) finalizeGame(room, 'normal');
   const base = snapshot(room.state);
   const evs = (room.lastEvents || []).map((e, i) => Object.assign({}, e, { id: (room.lastEventBase || 0) + i }));
   // 事件全局可见：每个客户端收到完整事件记录
@@ -83,6 +87,16 @@ function emitGame(room) {
   }
   if (room.state.phase === 'game_over') emitRoom(room);
   startTimer(room);
+}
+
+function finalizeGame(room, endReason) {
+  if (room.gameRecord) return room.gameRecord;
+  room.gameRecord = buildGameRecord(room, endReason);
+  for (const rp of room.players) {
+    const sock = io.sockets.sockets.get(rp.socketId);
+    if (sock) sock.emit('gameRecord', room.gameRecord);
+  }
+  return room.gameRecord;
 }
 
 function findPlayer(room, socketId) {
@@ -160,7 +174,10 @@ function runAction(room, socket, action) {
   if (!res.rejected) {
     room.lastEvents = res.events || [];
     room.lastEventBase = room.eventSeq;
-    room.eventSeq += (res.events || []).length;
+    for (const e of res.events || []) {
+      room.events.push(Object.assign({}, e, { id: room.eventSeq, ts: Date.now() }));
+      room.eventSeq++;
+    }
   }
   if (res.rejected) {
     if (socket) socket.emit('error', { message: '当前状态下无法执行该操作' });
@@ -300,6 +317,7 @@ io.on('connection', (socket) => {
       room.state.winner = room.state.rank[0] || null;
       room.state.status = 'over';
       room.state.phase = 'game_over';
+      finalizeGame(room, 'disband');
       emitGame(room);
     }
     cb && cb({ ok: true });

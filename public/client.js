@@ -18,6 +18,7 @@ let diceAnimating = false;
 let receiptPending = false;
 let stockAutoShown = false;
 let timerIv = null;
+let lastRecord = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -760,6 +761,8 @@ socket.on('timerStarted', (t) => {
 
 socket.on('error', (e) => toast(e.message || '操作失败'));
 
+socket.on('gameRecord', (rec) => { lastRecord = rec; });
+
 socket.on('reconnectToken', (d) => {
   pendingToken = d.token;
   if (me.roomCode && me.name) saveReconnect({ roomCode: me.roomCode, name: me.name, token: d.token });
@@ -798,9 +801,24 @@ function renderGameOver() {
     + '<span class="stamp">资本赢家</span></div>'
     + '<div class="rule"></div>'
     + '<table class="rank"><tr><th>名次</th><th>玩家</th><th>总资产</th></tr>' + rows + '</table>'
-    + '<div class="row"><button class="secondary" onclick="closeModal()">返回房间页</button>'
+    + '<div class="btnrow"><button class="secondary" onclick="closeModal()">返回房间页</button>'
+    + (roomHostId === socket.id ? '<button class="secondary" onclick="downloadRecord()">下载对局数据</button>' : '')
     + (roomHostId === socket.id ? '<button class="primary" onclick="socket.emit(\'startGame\')">重新开始新对局</button>' : '') + '</div>';
   openModal('对局结束');
+}
+
+function downloadRecord() {
+  if (!lastRecord) { toast('暂无对局数据'); return; }
+  const blob = new Blob([JSON.stringify(lastRecord, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const stamp = new Date(lastRecord.endedAt || Date.now()).toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  a.download = '环球大亨-' + (lastRecord.roomCode || 'game') + '-' + stamp + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ---------- 规则速查 ----------
