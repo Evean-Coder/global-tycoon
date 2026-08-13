@@ -14,6 +14,7 @@ function setup() {
 
 test('经过自己城市进入 build_decide，可建房', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   // 甲拥有罗马（12 号格，地价 12000）
   s.cities['罗马'].ownerId = p.id;
@@ -35,6 +36,7 @@ test('经过自己城市进入 build_decide，可建房', () => {
 
 test('build_decide 可拆房并返还 36%', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   s.cities['罗马'].ownerId = p.id;
   s.cities['罗马'].houseLevel = 2;
@@ -50,6 +52,7 @@ test('build_decide 可拆房并返还 36%', () => {
 
 test('build_decide 放弃则直接结束回合', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   s.cities['罗马'].ownerId = p.id;
   p.cities.push('罗马');
@@ -63,6 +66,7 @@ test('build_decide 放弃则直接结束回合', () => {
 
 test('空地皮且现金不足建房时经过自己城市直接结束（无弹窗阶段）', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   s.cities['罗马'].ownerId = p.id;
   p.cities.push('罗马');
@@ -74,6 +78,7 @@ test('空地皮且现金不足建房时经过自己城市直接结束（无弹�
 
 test('抵押中的自己城市经过时不进入 build_decide', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   s.cities['罗马'].ownerId = p.id;
   s.cities['罗马'].mortgaged = true;
@@ -86,6 +91,7 @@ test('抵押中的自己城市经过时不进入 build_decide', () => {
 
 test('购买资金不足 → 募集资金 → 抵押凑够 → 完成购买', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   // 甲已有巴黎（抵押可筹资 13000/2=6500）
   s.cities['巴黎'].ownerId = p.id;
@@ -110,6 +116,7 @@ test('购买资金不足 → 募集资金 → 抵押凑够 → 完成购买', ()
 
 test('募资后仍不足则无法确认购买，可取消（城市进入拍卖）', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   p.cash = 5000;
   p.position = 10;
@@ -128,6 +135,7 @@ test('募资后仍不足则无法确认购买，可取消（城市进入拍卖�
 
 test('机场购买资金不足 → 募集资金/取消购买', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   p.cash = 10000;
   p.position = 4;
@@ -142,6 +150,7 @@ test('机场购买资金不足 → 募集资金/取消购买', () => {
 
 test('冰冻支付资金不足时按跳过处理', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   p.frozen = true;
   p.cash = 3000;
@@ -157,6 +166,7 @@ test('冰冻支付资金不足时按跳过处理', () => {
 
 test('冰冻支付资金充足时正常解除', () => {
   const s = setup();
+  s.rounds = 2; // 第二轮起才可购买
   const p = s.players[0];
   p.frozen = true;
   s.turnIndex = 1;

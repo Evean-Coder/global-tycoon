@@ -19,6 +19,7 @@ function twoPlayerState() {
 
 test('购买：落在无主城市进入购买阶段，购买后归属与资金正确', () => {
   const state = twoPlayerState();
+  state.rounds = 2; // 第二轮起才可购买
   const rng = diceRng([1, 1]); // 掷出 1+1=2 → 2 号开普敦（无主）
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.phase, 'buy');
@@ -57,6 +58,28 @@ test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2
   assert.strictEqual(state.players[0].cash, cashBefore);
   assert.strictEqual(state.cities['卡萨布兰卡'].ownerId, null);
   assert.ok(res.events.some((e) => e.text.includes('购买上限')));
+});
+
+
+test('第一轮不能购买城市，第二轮起可购买', () => {
+  const state = twoPlayerState();
+  state.players[0].position = 0;
+  state.turnIndex = 0;
+  state.phase = 'waiting_roll';
+  // 第一轮（rounds=0）落到开普敦（2 号）
+  let r = logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1]));
+  assert.notStrictEqual(state.phase, 'buy'); // 不进入购买
+  assert.strictEqual(state.cities['开普敦'].ownerId, null);
+  assert.strictEqual(state.turnIndex, 1); // 回合结束，轮到乙
+  assert.ok(r.events.some((e) => e.text.includes('第一轮不能购买')));
+  // 第二轮起（rounds=2）可购买
+  state.turnIndex = 0;
+  state.rounds = 2;
+  state.players[0].position = 0;
+  state.phase = 'waiting_roll';
+  r = logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1]));
+  assert.strictEqual(state.phase, 'buy');
+  assert.strictEqual(state.pending.cityId, '开普敦');
 });
 
 
@@ -714,6 +737,7 @@ test('监狱：掷双数出狱事件包含具体点数', () => {
 
 test('监狱：双方先后入狱后，狱中玩家掷骰出狱可继续推进', () => {
   const state = twoPlayerState();
+  state.rounds = 2; // 第二轮起，出狱落点可正常结算购买
   state.players[0].cash = 200000;
   state.players[1].cash = 200000;
   // 甲在狱中：掷 1+4 失败，轮到乙

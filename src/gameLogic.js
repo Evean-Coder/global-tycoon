@@ -287,6 +287,12 @@ function resolveLanding(state, sqId, events, rng) {
 function resolveCity(state, player, sq, events, rng) {
   const city = state.cities[sq.cityId];
   if (!city.ownerId) {
+    if (state.rounds < 2) {
+      // 第一轮（所有玩家各自行动一次）不能购买城市
+      log(events, `${player.name} 第一轮不能购买城市，${cityLabel(state, sq.cityId)} 保持无主`, 'buy');
+      endTurn(state, events, rng);
+      return;
+    }
     state.phase = 'buy';
     state.pending = { playerId: player.id, cityId: sq.cityId, context: null };
     log(events, `${player.name} 经过无主的 ${cityLabel(state, sq.cityId)}（${city.price}），可选择购买`, 'buy');
