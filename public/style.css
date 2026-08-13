@@ -362,6 +362,9 @@ ul.players .slot{color:var(--off);font-size:13px}
 #rulesBody b{color:var(--title)}
 #rulesBody ul{padding-left:18px;margin:4px 0}
 #rulesBody h4{color:var(--gold2);margin:12px 0 4px;letter-spacing:2px;font-family:var(--serif)}
+#rulesBody .rules-group{margin:6px 0 10px;padding-left:10px;border-left:2px solid var(--line-faint)}
+#rulesBody .rules-group > b{color:var(--gold2);font-size:13px}
+#rulesBody .rules-group ul{margin:2px 0 0 14px;padding-left:10px;border-left:1px solid var(--line-faint)}
 
 /* ---------- Toast ---------- */
 #toast{
