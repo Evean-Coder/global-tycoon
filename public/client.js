@@ -436,6 +436,7 @@ function renderPending() {
       if (isMe) {
         const city = game.cities[game.pending.cityId];
         const poor = meP.cash < city.price;
+        const lapCap = (meP.lapBuys || 0) >= 3;
         body.innerHTML = '<div class="card-tag">PROPERTY</div>'
           + kv('地产名称', (city.country ? city.country + '·' : '') + game.pending.cityId)
           + kv('当前价格', fmt(city.price), 'g')
@@ -445,7 +446,9 @@ function renderPending() {
           + (poor
             ? '<p class="hint">现金不足，无法直接购买。你可以募集资金（抵押/拆房凑够地价）或取消购买（进入拍卖）。</p>'
               + '<div class="row"><button class="secondary" onclick="emitAct({type:\'buy_fundraise\',decision:\'start\'})">募集资金</button><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">取消购买</button></div>'
-            : '<div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买</button><button class="positive" onclick="emitAct({type:\'buy\',decision:\'buy\'})">确认购买</button></div>');
+            : (lapCap
+              ? '<p class="hint">本圈（起点到起点）已购买 3 座房产，本圈不能再购买城市（机场不限）。</p><div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买（进入拍卖）</button></div>'
+              : '<div class="row"><button class="risk" onclick="emitAct({type:\'buy\',decision:\'pass\'})">放弃购买</button><button class="positive" onclick="emitAct({type:\'buy\',decision:\'buy\'})">确认购买</button></div>'));
         openModal('地产购买');
       }
       break;
@@ -809,14 +812,14 @@ function buildRules() {
     '入狱（1 张）：直接进入最近的上一个监狱',
   ];
   $('rulesBody').innerHTML = ''
-    + '<p><b>目标：</b>购买地产、建设城市、投资股票，坚持到最后获胜。</p>'
-    + '<p><b>回合：</b>掷双骰（双数连掷、三次双数入狱）；跨过起点 +5000 并触发股息与股票窗口。</p>'
-    + '<p><b>地产：</b>租金 = 地价 ×（30% + 房屋等级 × 30%）；经过自有城可建/拆 1 级。</p>'
-    + '<p><b>城市交易：</b>直接出售（总价值成交、卖家得 80%）或拍卖（起拍 10%）。</p>'
+    + '<p><b>目标：</b>初始资金 150000；购买地产、建设城市、投资股票，坚持到最后获胜。</p>'
+    + '<p><b>回合：</b>掷双骰（一个 1–6、一个 1–3；双数连掷、三次双数入狱）；跨过起点 +5000 并触发股息与股票窗口。</p>'
+    + '<p><b>地产：</b>租金 = 地价 ×（30% + 房屋等级 × 30%）；经过自有城可建/拆 1 级；每圈（起点到起点）最多购买 3 座城市（机场不限）。</p>'
+    + '<p><b>城市交易：</b>直接出售（总价值成交、卖家得 80%）或拍卖（起拍 75%、加价至少 1000）。</p>'
     + '<p><b>抵押：</b>总价值 × 50%，最多 2 座，每轮 5% 利息。</p>'
     + '<p><b>机场：</b>15000 购买，机场费 3000×拥有数，机票 = 距离 × 500。</p>'
-    + '<p><b>极地/监狱：</b>冰冻付 5000 解除；21 号监狱付 15000 或掷双数提前出狱（第 3 回合自动释放，出狱费非强制）；11/32 号监狱关押 1 回合自动释放。</p>'
-    + '<p><b>股票：</b>每城 10 股，仅经过起点可买卖（≤6 股/3 城/单城 2 股）；收租时持股抵扣。</p>'
+    + '<p><b>极地/监狱：</b>冰冻付 5000 解除；21 号监狱付 15000 或掷双数提前出狱（一直放弃则关满 3 回合后免费释放）；11/32 号监狱下一回合跳过、再下一回合自动释放。</p>'
+    + '<p><b>股票：</b>每城 20 股（1 股 = 5%），初始股价 = 地价 ÷ 10 × 2；仅起点可买卖（≤6 股/3 城，单城 2 股、地价≥15000 的城市单次 1 股）；城市所有者最多持有 4 股；持股≥20% 减 10%、≥40% 减 30%、≥60% 减 50% 租金。</p>'
     + '<h4>机会卡（40 张）</h4><ul>' + deck.map((d) => '<li>' + d + '</li>').join('') + '</ul>';
 }
 
@@ -843,8 +846,8 @@ function renderStock() {
     const div = document.createElement('div');
     div.className = 'stock-item';
     const held = meP ? (meP.stocks[cityId] || 0) : 0;
-    const myCityCap = city.ownerId === me.gameId && held >= 1;
-    div.innerHTML = '<b>' + (city.country ? city.country + '·' : '') + cityId + '</b><span class="mono">股价 ' + st.price + '</span><span>所有者：' + (owner ? owner.name : '无主') + '</span><span>持有 ' + held + ' 股' + (locked || myCityCap ? '（锁定' + (myCityCap ? '：本城最多持有 1 股' : '') + '）' : '') + '</span>';
+    const myCityCap = city.ownerId === me.gameId && held >= 4;
+    div.innerHTML = '<b>' + (city.country ? city.country + '·' : '') + cityId + '</b><span class="mono">股价 ' + st.price + '</span><span>所有者：' + (owner ? owner.name : '无主') + '</span><span>持有 ' + held + ' 股' + (locked || myCityCap ? '（锁定' + (myCityCap ? '：本城最多持有 4 股（20%）' : '') + '）' : '') + '</span>';
     if (!locked && !myCityCap && game.phase === 'stock' && isMyTurn()) {
       const d = stockDraft[cityId] || { buy: 0, sell: 0 };
       const stp = document.createElement('div');
@@ -855,7 +858,7 @@ function renderStock() {
     }
     list.appendChild(div);
   }
-  $('stockHint').textContent = '当前现金：' + fmt(meP ? meP.cash : 0) + '；' + ((game.phase === 'stock' && isMyTurn()) ? '买入最多 6 股（3 城、单城 2 股），卖出不限' : '仅经过起点时可交易');
+  $('stockHint').textContent = '当前现金：' + fmt(meP ? meP.cash : 0) + '；' + ((game.phase === 'stock' && isMyTurn()) ? '买入最多 6 股（3 城；单城 2 股，地价≥15000 的城市单次 1 股），卖出不限' : '仅经过起点时可交易');
   renderTransfer();
 }
 function adjStock(cityId, kind, delta) {
@@ -864,8 +867,11 @@ function adjStock(cityId, kind, delta) {
   const held = meP ? (meP.stocks[cityId] || 0) : 0;
   if (kind === 'sell') d.sell = Math.max(0, Math.min(held, d.sell + delta));
   else {
-    const ownCap = game.cities[cityId] && game.cities[cityId].ownerId === me.gameId ? 1 - held : 99;
-    d.buy = Math.max(0, Math.min(d.buy + delta, ownCap));
+    let cap = 2;
+    const c2 = game.cities[cityId];
+    if (c2 && c2.price >= 15000) cap = Math.min(cap, 1);
+    if (c2 && c2.ownerId === me.gameId) cap = Math.min(cap, 4 - held);
+    d.buy = Math.max(0, Math.min(d.buy + delta, cap));
   }
   stockDraft[cityId] = d;
   renderStock();
@@ -881,7 +887,11 @@ function submitStock() {
   const buys = orders.filter((o) => o.side === 'buy');
   const total = buys.reduce((s, o) => s + o.shares, 0);
   if (buys.length > 3 || total > 6) { toast('买入最多 3 城、合计 6 股、单城 2 股'); return; }
-  for (const o of buys) if (o.shares > 2) { toast('单城最多买 2 股'); return; }
+  for (const o of buys) {
+    if (o.shares > 2) { toast('单城最多买 2 股'); return; }
+    const bc = game.cities[o.cityId];
+    if (bc && bc.price >= 15000 && o.shares > 1) { toast('地价 15000 及以上的城市单次最多买 1 股'); return; }
+  }
   const meP = game.players.find((p) => p.id === me.gameId);
   if (meP) {
     let cost = 0, proceeds = 0;

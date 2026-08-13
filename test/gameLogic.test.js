@@ -11,7 +11,7 @@ function fakeRng(seq) {
 }
 // 按骰子点数生成 rng 序列
 function diceRng(diceList) {
-  return fakeRng(diceList.map((d) => (d - 1 + 0.5) / 6));
+  return fakeRng(diceList.map((d, i) => (i === 0 ? (d - 1 + 0.5) / 6 : (d - 1 + 0.5) / 3)));
 }
 function twoPlayerState() {
   return createGameState('TEST01', ['甲', '乙']);
@@ -25,7 +25,7 @@ test('购买：落在无主城市进入购买阶段，购买后归属与资金�
   assert.strictEqual(state.pending.cityId, '开普敦');
   logic.apply(state, { type: 'buy', decision: 'buy' }, rng);
   assert.strictEqual(state.cities['开普敦'].ownerId, 'p0');
-  assert.strictEqual(state.players[0].cash, 100000 - 7200);
+  assert.strictEqual(state.players[0].cash, 150000 - 7200);
 });
 
 test('收租：路过他人城市支付租金（整数）', () => {
@@ -38,22 +38,32 @@ test('收租：路过他人城市支付租金（整数）', () => {
   const rng = diceRng([1, 1]); // 1+1=2 → 5 号开罗（甲的）
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.players[1].position, 5);
-  assert.strictEqual(state.players[1].cash, 100000 - 1800);
-  assert.strictEqual(state.players[0].cash, 100000 + 1800);
+  assert.strictEqual(state.players[1].cash, 150000 - 1800);
+  assert.strictEqual(state.players[0].cash, 150000 + 1800);
 });
 
-test('股票抵扣：租客持股 50% 免租，银行补足拥有者', () => {
-  const state = twoPlayerState();
-  state.cities['开罗'].ownerId = 'p0';
-  state.players[0].cities.push('开罗');
-  state.stocks['开罗'].holders['p1'] = 5; // 50%
-  state.turnIndex = 1;
-  state.phase = 'waiting_roll';
-  state.players[1].position = 3;
-  const rng = diceRng([1, 1]);
-  logic.apply(state, { type: 'roll_dice' }, rng);
-  assert.strictEqual(state.players[1].cash, 100000); // 免租
-  assert.strictEqual(state.players[0].cash, 100000 + 1800);
+test('股票抵扣：持股阶梯减免租金，银行补足拥有者', () => {
+  const mk = (shares) => {
+    const state = twoPlayerState();
+    state.cities['开罗'].ownerId = 'p0';
+    state.players[0].cities.push('开罗');
+    state.stocks['开罗'].holders['p1'] = shares;
+    state.turnIndex = 1;
+    state.phase = 'waiting_roll';
+    state.players[1].position = 3;
+    logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1])); // 3+2 → 5 号开罗
+    return state;
+  };
+  // 5 股 = 25% → 减 10%
+  let s = mk(5);
+  assert.strictEqual(s.players[1].cash, 150000 - 1620);
+  assert.strictEqual(s.players[0].cash, 150000 + 1800);
+  // 8 股 = 40% → 减 30%
+  s = mk(8);
+  assert.strictEqual(s.players[1].cash, 150000 - 1260);
+  // 12 股 = 60% → 减 50%
+  s = mk(12);
+  assert.strictEqual(s.players[1].cash, 150000 - 900);
 });
 
 test('建房与拆房：经过自有城可建 1 级、拆 1 级返还 60%', () => {
@@ -64,10 +74,10 @@ test('建房与拆房：经过自有城可建 1 级、拆 1 级返还 60%', () =
   state.phase = 'waiting_roll';
   logic.apply(state, { type: 'build_house', cityId: '内罗毕' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['内罗毕'].houseLevel, 1);
-  assert.strictEqual(state.players[0].cash, 100000 - 2160);
+  assert.strictEqual(state.players[0].cash, 150000 - 2160);
   logic.apply(state, { type: 'demolish_house', cityId: '内罗毕' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['内罗毕'].houseLevel, 0);
-  assert.strictEqual(state.players[0].cash, 100000 - 2160 + 1296);
+  assert.strictEqual(state.players[0].cash, 150000 - 2160 + 1296);
 });
 
 test('抵押与赎回：抵押金=总价值×50%，计息 5%，赎回付本金+利息', () => {
@@ -77,7 +87,7 @@ test('抵押与赎回：抵押金=总价值×50%，计息 5%，赎回付本金+�
   state.phase = 'waiting_roll';
   logic.apply(state, { type: 'mortgage', cityId: '开罗' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgaged, true);
-  assert.strictEqual(state.players[0].cash, 100000 + 3000);
+  assert.strictEqual(state.players[0].cash, 150000 + 3000);
   logic.advanceTurn(state, [], fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgageInterest, 150);
   state.turnIndex = 0;
@@ -85,7 +95,7 @@ test('抵押与赎回：抵押金=总价值×50%，计息 5%，赎回付本金+�
   state.players[0].cash += 3150;
   logic.apply(state, { type: 'redeem', cityId: '开罗' }, fakeRng([0.5]));
   assert.strictEqual(state.cities['开罗'].mortgaged, false);
-  assert.strictEqual(state.players[0].cash, 100000 + 3000);
+  assert.strictEqual(state.players[0].cash, 150000 + 3000);
 });
 
 test('机会卡：抽到奖励卡获得金额', () => {
@@ -94,7 +104,7 @@ test('机会卡：抽到奖励卡获得金额', () => {
   state.players[0].position = 1;
   const rng = diceRng([1, 1]); // 1+1=2 → 3 号机会卡
   logic.apply(state, { type: 'roll_dice' }, rng);
-  assert.strictEqual(state.players[0].cash, 100000 + 8000);
+  assert.strictEqual(state.players[0].cash, 150000 + 8000);
 });
 
 test('监狱：连续三次双数入狱，位置为最近上一个入狱格', () => {
@@ -125,7 +135,7 @@ test('拍卖：放弃购买进入拍卖，出价最高者获得', () => {
   logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 5400 }, rng);
   logic.apply(state, { type: 'auction_respond', decision: 'pass' }, rng);
   assert.strictEqual(state.cities['开普敦'].ownerId, 'p1');
-  assert.strictEqual(state.players[1].cash, 100000 - 5400);
+  assert.strictEqual(state.players[1].cash, 150000 - 5400);
 });
 test('破产：多城连续拍卖逐座完成，唯一侧存者获胜', () => {
   const state = twoPlayerState();
@@ -166,7 +176,7 @@ test('破产：拍卖中另一玩家出价获得后结算胜负', () => {
   assert.strictEqual(state.status, 'over');
   assert.strictEqual(state.winner, 'p1');
   assert.strictEqual(state.cities['开罗'].ownerId, 'p1');
-  assert.strictEqual(state.players[1].cash, 100000 - 4500);
+  assert.strictEqual(state.players[1].cash, 150000 - 4500);
 });
 
 test('破产：押质城市归银行不进拍卖', () => {
@@ -330,7 +340,7 @@ test('股票：买卖与未交易均有事件记录', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p1';
   state.stocks['开罗'].price = 600; // 开罗地价 6000/10
-  state.players[0].cash = 100000;
+  state.players[0].cash = 150000;
   state.phase = 'stock';
   state.pending = { playerId: 'p0', kind: 'go_stock', after: 'end' };
   const res = logic.apply(state, { type: 'stock_trade', orders: [{ cityId: '开罗', side: 'buy', shares: 2 }] }, fakeRng([0.5]));
@@ -381,8 +391,8 @@ test('股票转让：发起后对方确认回到股票窗口，每回合限一�
   assert.strictEqual(state.pending.kind, 'go_stock');
   assert.strictEqual(state.stocks['开罗'].holders['p0'], 1);
   assert.strictEqual(state.stocks['开罗'].holders['p1'], 1);
-  assert.strictEqual(state.players[0].cash, 100000 + 500);
-  assert.strictEqual(state.players[1].cash, 100000 - 500);
+  assert.strictEqual(state.players[0].cash, 150000 + 500);
+  assert.strictEqual(state.players[1].cash, 150000 - 500);
   // 同回合再次发起：无效果（每回合限一笔）
   const h0 = state.stocks['开罗'].holders['p0'];
   const c0 = state.players[0].cash;
@@ -481,7 +491,7 @@ test('监狱：双方先后入狱后，狱中玩家掷骰出狱可继续推进',
   state.players[0].position = 21;
   state.phase = 'jail_turn';
   state.pending = { playerId: 'p0', kind: 'jail' };
-  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1, 4]));
+  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1, 2]));
   assert.strictEqual(state.players[0].jailTurns, 1);
   assert.strictEqual(state.turnIndex, 1);
   assert.strictEqual(state.phase, 'waiting_roll');
@@ -553,7 +563,7 @@ test('监狱与极地互锁：双方先后受困，放弃/掷骰循环后正常�
   state.players[1].frozen = true; state.players[1].position = 14;
   state.phase = 'jail_turn'; state.pending = { playerId: 'p0', kind: 'jail' }; state.turnIndex = 0;
   // 甲掷骰失败 → 轮到乙（冰冻）
-  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1, 4]));
+  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1, 2]));
   assert.strictEqual(r.rejected, undefined);
   assert.strictEqual(state.phase, 'frozen_turn');
   assert.strictEqual(state.pending.playerId, 'p1');

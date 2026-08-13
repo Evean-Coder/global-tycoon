@@ -163,6 +163,6 @@ test('冰冻支付资金充足时正常解除', () => {
   logic.advanceTurn(s, [], rng);
   assert.strictEqual(s.phase, 'frozen_turn');
   logic.apply(s, { type: 'respond_frozen', decision: 'pay' }, rng);
-  assert.strictEqual(p.cash, 100000 - 5000);
+  assert.strictEqual(p.cash, 150000 - 5000);
   assert.strictEqual(s.phase, 'waiting_roll');
 });

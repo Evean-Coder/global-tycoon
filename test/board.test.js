@@ -33,12 +33,12 @@ test('机会卡组 40 张：奖励 15、罚款 15、位移 9、入狱 1', () => 
   assert.strictEqual(Math.max(...deck.filter((c) => c.type === 'fine').map((c) => c.amount)), 8000);
 });
 
-test('初始对局状态：2 名玩家、资金 100000、位置 0', () => {
+test('初始对局状态：2 名玩家、资金 150000、位置 0', () => {
   const state = createGameState('ABC123', ['甲', '乙']);
   assert.strictEqual(state.status, 'playing');
   assert.strictEqual(state.players.length, 2);
-  assert.strictEqual(state.players[0].cash, 100000);
+  assert.strictEqual(state.players[0].cash, 150000);
   assert.strictEqual(state.players[0].position, 0);
   assert.strictEqual(state.cities['上海'].price, 20000);
-  assert.strictEqual(state.stocks['上海'].price, 2000);
+  assert.strictEqual(state.stocks['上海'].price, 4000);
 });

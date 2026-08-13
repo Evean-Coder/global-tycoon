@@ -5,7 +5,7 @@ const { rollDice, shuffle } = require('./random');
 const JAILS = [11, 21, 32];
 const GO = 0;
 const GO_BONUS = 5000;
-const START_CASH = 100000;
+const START_CASH = 150000;
 const JAIL_FINE = 15000;
 const FREEZE_FINE = 5000;
 const AIRPORT_PRICE = 15000;
@@ -86,7 +86,7 @@ function playerById(state, id) {
 }
 
 function stockPriceCap(city) {
-  return (city.price / 10) * 2;
+  return Math.round((city.price / 10) * 2 * 2); // 初始股价的 2 倍
 }
 
 function bumpStock(state, cityId, delta) {
@@ -174,6 +174,7 @@ function advanceTurn(state, events, rng) {
 
 function settleGo(state, player, events) {
   player.cash += GO_BONUS;
+  player.lapBuys = 0; // 回到起点重置本圈购买次数
   log(events, `${player.name} 跨过/停在起点，获得 ${GO_BONUS}`);
   // 名下城市股息
   for (const cityId of player.cities) {
@@ -183,7 +184,7 @@ function settleGo(state, player, events) {
     const holders = Object.entries(state.stocks[cityId].holders).filter(([, n]) => n > 0);
     let distributed = 0;
     for (const [pid, n] of holders) {
-      const amt = Math.round((total * n) / 10);
+      const amt = Math.round((total * n) / 20); // 每城 20 股
       if (amt > 0) {
         playerById(state, pid).cash += amt;
         distributed += amt;
@@ -272,8 +273,12 @@ function resolveCity(state, player, sq, events, rng) {
   const rent = rentFor(city);
   const owner = playerById(state, city.ownerId);
   const owned = sharesOf(state, player.id, sq.cityId);
-  const discountRatio = Math.min((owned * 2) / 10, 1);
-  const discount = Math.round(rent * discountRatio);
+  const ratio = owned / 20; // 每城 20 股
+  let dr = 0;
+  if (ratio >= 0.6) dr = 0.5;
+  else if (ratio >= 0.4) dr = 0.3;
+  else if (ratio >= 0.2) dr = 0.1;
+  const discount = Math.round(rent * dr); // 减免上限 50%
   const pay = rent - discount;
   player.cash -= pay;
   owner.cash += rent; // 银行补足抵扣部分
@@ -779,6 +784,7 @@ function rollAction(state, p, events, rng) {
     if (crossedGo) {
       openStockWindow(state, p, events, 'land');
     } else {
+      p.lapBuys = 0; // 停在起点同样重置本圈购买次数
       openStockWindow(state, p, events, 'end');
     }
   } else {
@@ -819,6 +825,7 @@ function jailAction(state, p, action, events, rng) {
       return;
     }
     if (p.position === GO) {
+      p.lapBuys = 0; // 停在起点重置本圈购买次数
       openStockWindow(state, p, events, 'end');
       return;
     }
@@ -846,6 +853,10 @@ function buyAction(state, p, action, events, rng) {
   const pend = state.pending;
   const city = state.cities[pend.cityId];
   if (action.decision === 'buy') {
+    if (p.lapBuys >= 3) {
+      log(events, `${p.name} 本圈（起点到起点）已达购买上限（3 座房产，机场不限）`, 'buy');
+      return;
+    }
     if (p.cash < city.price) {
       log(events, `${p.name} 资金不足，需先募集资金或取消购买`, 'buy');
       buyFundraise(state, p, { decision: 'start' }, events, rng);
@@ -854,9 +865,10 @@ function buyAction(state, p, action, events, rng) {
     p.cash -= city.price;
     city.ownerId = p.id;
     p.cities.push(pend.cityId);
+    p.lapBuys = (p.lapBuys || 0) + 1;
     bumpStock(state, pend.cityId, 0.1);
     enforceOwnerStockCap(state, p, pend.cityId, events);
-    log(events, `${p.name} 购买 ${cityLabel(state, pend.cityId)}（${city.price}）`, 'buy');
+    log(events, `${p.name} 购买 ${cityLabel(state, pend.cityId)}（${city.price}，本圈第 ${p.lapBuys} 座）`, 'buy');
     if (p.cash < 0) startSelfRescue(state, p, -p.cash, events, `购买`);
     else endTurn(state, events, rng);
   } else {
@@ -977,12 +989,18 @@ function buyFundraise(state, p, action, events, rng) {
     if (target.kind === 'city') {
       const city = state.cities[target.cityId];
       if (city.ownerId) { endTurn(state, events, rng); return; }
+      if (p.lapBuys >= 3) {
+        log(events, `${p.name} 本圈（起点到起点）已达购买上限（3 座房产，机场不限）`, 'buy');
+        endTurn(state, events, rng);
+        return;
+      }
       p.cash -= city.price;
       city.ownerId = p.id;
       p.cities.push(target.cityId);
+      p.lapBuys = (p.lapBuys || 0) + 1;
       bumpStock(state, target.cityId, 0.1);
       enforceOwnerStockCap(state, p, target.cityId, events);
-      log(events, `${p.name} 募资完成，购买 ${cityLabel(state, target.cityId)}（${city.price}）`, 'buy');
+      log(events, `${p.name} 募资完成，购买 ${cityLabel(state, target.cityId)}（${city.price}，本圈第 ${p.lapBuys} 座）`, 'buy');
     } else {
       const airport = state.airports[target.airportId];
       if (airport.ownerId) { endTurn(state, events, rng); return; }
@@ -1186,13 +1204,17 @@ function stockTrade(state, p, orders, events) {
   if (!orders || !orders.length) return;
   const validBuys = [];
   for (const o of orders.filter((x) => x.side === 'buy')) {
+    const city = state.cities[o.cityId];
     if (o.shares > 2) {
       log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 单城最多 2 股`, 'stock');
       continue;
     }
-    const city = state.cities[o.cityId];
-    if (city.ownerId === p.id && sharesOf(state, p.id, o.cityId) + o.shares > 1) {
-      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 城市所有者最多持有 1 股`, 'stock');
+    if (city.price >= 15000 && o.shares > 1) {
+      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 地价较高，单次最多买 1 股`, 'stock');
+      continue;
+    }
+    if (city.ownerId === p.id && sharesOf(state, p.id, o.cityId) + o.shares > 4) {
+      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 城市所有者最多持有 4 股（20%）`, 'stock');
       continue;
     }
     validBuys.push(o);
@@ -1202,8 +1224,9 @@ function stockTrade(state, p, orders, events) {
     return;
   }
   const buys = validBuys;
+  const execute = validBuys.concat(orders.filter((x) => x.side !== 'buy'));
   let cost = 0, proceeds = 0;
-  for (const o of orders) {
+  for (const o of execute) {
     const st = state.stocks[o.cityId];
     const shares = Math.abs(o.shares);
     if (o.side === 'buy') cost += shares * st.price;
@@ -1213,7 +1236,7 @@ function stockTrade(state, p, orders, events) {
     log(events, `${p.name} 股票交易未生效：现金不足`, 'stock');
     return;
   }
-  for (const o of orders) {
+  for (const o of execute) {
     const st = state.stocks[o.cityId];
     const shares = Math.abs(o.shares);
     if (o.side === 'buy') {
@@ -1221,6 +1244,13 @@ function stockTrade(state, p, orders, events) {
       st.holders[p.id] = (st.holders[p.id] || 0) + shares;
       p.stocks[o.cityId] = (p.stocks[o.cityId] || 0) + shares;
       log(events, `${p.name} 购买 ${cityLabel(state, o.cityId)} 股份 ×${shares}（${shares * st.price}）`, 'stock');
+      const city = state.cities[o.cityId];
+      if (city && city.ownerId && city.ownerId !== p.id) {
+        const owner = playerById(state, city.ownerId);
+        const rev = Math.round(shares * st.price * 0.5);
+        owner.cash += rev;
+        log(events, `${owner.name} 获得股票出售收益 ${rev}（购股金额一半）`, 'stock');
+      }
     } else {
       const held = st.holders[p.id] || 0;
       const sell = Math.min(shares, held);
@@ -1288,12 +1318,12 @@ function stockTransfer(state, p, action, events) {
 function enforceOwnerStockCap(state, p, cityId, events) {
   const st = state.stocks[cityId];
   const held = st.holders[p.id] || 0;
-  if (held > 1) {
-    const extra = held - 1;
+  if (held > 4) {
+    const extra = held - 4;
     p.cash += extra * st.price;
-    st.holders[p.id] = 1;
-    p.stocks[cityId] = 1;
-    log(events, `${p.name} 超持 ${cityLabel(state, cityId)} 股份，强制卖出 ${extra} 股`, 'stock');
+    st.holders[p.id] = 4;
+    p.stocks[cityId] = 4;
+    log(events, `${p.name} 超持 ${cityLabel(state, cityId)} 股份（上限 4 股），强制卖出 ${extra} 股`, 'stock');
   }
 }
 

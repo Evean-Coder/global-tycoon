@@ -185,7 +185,7 @@ test('对局结束后房主可重新开始新对局', async () => {
   gs = await gsR;
   assert.strictEqual(gs.phase, 'waiting_roll');
   assert.strictEqual(gs.rounds, 0);
-  assert.strictEqual(gs.players[0].cash, 100000);
+  assert.strictEqual(gs.players[0].cash, 150000);
   assert.strictEqual(gs.status, 'playing');
 
   a.close();

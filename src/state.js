@@ -3,7 +3,7 @@
 const { buildBoard, buildChanceDeck } = require('./board');
 const { createRng, shuffle } = require('./random');
 
-const START_CASH = 100000;
+const START_CASH = 150000;
 const PLAYER_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835'];
 
 function createPlayer(name, seat, id) {
@@ -21,6 +21,7 @@ function createPlayer(name, seat, id) {
     cities: [],
     airports: [],
     stocks: {}, // cityId -> shares
+    lapBuys: 0, // 一圈（起点到起点）内购买城市数
     connected: true,
     reconnectToken: null,
   };
@@ -43,7 +44,7 @@ function createGameState(roomCode, playerNames) {
   }
   const stocks = {};
   for (const cityId of Object.keys(cities)) {
-    stocks[cityId] = { price: cities[cityId].price / 10, holders: {} };
+    stocks[cityId] = { price: Math.round((cities[cityId].price / 10) * 2), holders: {} };
   }
   return {
     roomCode,
