@@ -206,7 +206,10 @@ function afterAnim(state) {
   if (animQueued) { const st = animQueued; animQueued = null; processState(st); }
 }
 function finishRender(state) {
-  if (state.phase !== 'stock') stockAutoShown = false;
+  if (state.phase !== 'stock') {
+    stockAutoShown = false;
+    $('stockModal').classList.add('hidden'); // 股票阶段结束（含超时自动跳过）后收起股票弹窗，防止遮罩拦截后续弹窗
+  }
   renderBoard();
   renderPieces();
   renderSide();
@@ -237,10 +240,12 @@ function finishRender(state) {
       }
     }
   }
-  if (!chanceShown) renderPending();
+  // 机会卡票据保持显示直到玩家点击「确认」：后续广播（如其他玩家行动）不得自动关闭/替换
+  if (!chanceShown && !receiptPending) renderPending();
 }
 function afterReceipt() {
   receiptPending = false;
+  closeModal();
   renderPending();
 }
 
