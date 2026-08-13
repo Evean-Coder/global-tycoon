@@ -835,6 +835,23 @@ test('监狱：11/32 号监狱关押 1 回合，下回合自动释放', () => {
   assert.strictEqual(s2.turnIndex, 1);
 });
 
+test('监狱：连续两名 1 回合监狱玩家逐个跳过，第三人正常行动', () => {
+  const state = createGameState('J3', ['甲', '乙', '丙']);
+  state.players[0].jailed = true; state.players[0].jailTurns = 0; state.players[0].position = 11;
+  state.players[1].jailed = true; state.players[1].jailTurns = 0; state.players[1].position = 32;
+  state.players[2].position = 10;
+  state.turnIndex = 2; // 丙刚行动完，按顺序应先轮甲
+  state.phase = 'waiting_roll';
+  const evs = [];
+  logic.advanceTurn(state, evs, fakeRng([0.5]));
+  assert.strictEqual(state.players[0].jailTurns, 1); // 甲被跳过
+  assert.strictEqual(state.players[1].jailTurns, 1); // 乙也被跳过（不能自动释放）
+  assert.strictEqual(state.players[0].jailed, true);
+  assert.strictEqual(state.players[1].jailed, true);
+  assert.strictEqual(state.turnIndex, 2); // 轮到丙
+  assert.strictEqual(state.phase, 'waiting_roll');
+});
+
 test('监狱与极地互锁：双方先后受困，放弃/掷骰循环后正常轮转', () => {
   const state = twoPlayerState();
   state.players[0].cash = 200000; state.players[1].cash = 200000;

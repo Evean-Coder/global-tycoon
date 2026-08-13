@@ -162,8 +162,10 @@ function advanceTurn(state, events, rng) {
     }
   }
   let p = currentPlayer(state);
-  // 11/32 号监狱：关押 1 回合——该玩家的下一回合直接跳过（不做任何行动）
-  if (p.jailed && jailLimitFor(p.position) === 1 && p.jailTurns < 1) {
+  // 11/32 号监狱：关押 1 回合——该玩家的下一回合直接跳过（不做任何行动）；
+  // 循环处理连续多名待跳过的玩家（如多人先后入 1 回合监狱）
+  let skipGuard = 0;
+  while (p.jailed && jailLimitFor(p.position) === 1 && p.jailTurns < 1 && skipGuard++ < state.players.length) {
     p.jailTurns = 1;
     log(events, `${p.name} 被关押 1 回合，本回合跳过`, 'jail');
     do {

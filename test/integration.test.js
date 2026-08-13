@@ -298,7 +298,7 @@ test('房间内昵称重复加入被拒', async () => {
   a.close(); b.close(); c.close(); child.kill();
 }, { timeout: 30000 });
 
-test('在线玩家重复重连被拒', async () => {
+test('在线玩家可用令牌顶替重连（网络抖动/快速刷新恢复）', async () => {
   const port = 7400 + Math.floor(Math.random() * 300);
   const child = spawn(process.execPath, ['server.js'], {
     env: { ...process.env, PORT: String(port) },
@@ -320,10 +320,13 @@ test('在线玩家重复重连被拒', async () => {
   assert.ok(token);
   const a2 = Client(url);
   await once(a2, 'connect');
-  // 甲仍在线，用其令牌重连应被拒（防顶替）
+  // 甲仍在线，但令牌有效：新连接顶替旧连接，修复旧连接未判离线时的重连失败
+  const oldDiscP = once(a, 'disconnect', 4000); // 旧连接会被服务端强制断开（先于重连回调，需提前监听）
   const res = await new Promise((resolve) => a2.emit('reconnect', { roomCode: code, name: '甲', token }, resolve));
-  assert.strictEqual(res.ok, false);
-  assert.ok(String(res.error || '').includes('在线'));
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.roomCode, code);
+  // 旧连接被服务端强制断开
+  await oldDiscP;
   a2.close(); a.close(); b.close(); child.kill();
 }, { timeout: 30000 });
 

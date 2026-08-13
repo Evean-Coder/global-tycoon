@@ -212,12 +212,15 @@ io.on('connection', (socket) => {
     if (!room) return cb && cb({ ok: false, error: '房间不存在' });
     const rp = room.players.find((p) => p.name === data.name && p.token === data.token);
     if (!rp) return cb && cb({ ok: false, error: '重连校验失败' });
-    if (rp.connected && rp.socketId !== socket.id) return cb && cb({ ok: false, error: '该玩家当前在线，无法重复重连' });
     const oldSocketId = rp.socketId;
+    // 令牌有效但旧连接仍标记在线（网络抖动自动重连、快速刷新竞态等）：
+    // 先接管身份，再强制断开旧连接（顺序不可颠倒，否则旧连接的 disconnect 会误处理本玩家）
+    const oldSock = rp.connected && oldSocketId !== socket.id ? io.sockets.sockets.get(oldSocketId) : null;
     rp.socketId = socket.id;
     rp.connected = true;
     rp.token = null;
     socket.join(`room:${code}`);
+    if (oldSock) oldSock.disconnect(true);
     issueToken(socket, rp);
     if (room.hostId === oldSocketId) {
       room.hostId = socket.id;
