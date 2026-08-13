@@ -10,7 +10,7 @@ function fakeRng(seq) {
   return () => (i < seq.length ? seq[i++] : 0.5);
 }
 function diceRng(diceList) {
-  return fakeRng(diceList.map((d) => (d - 1 + 0.5) / 6));
+  return fakeRng(diceList.map((d) => (d - 1 + 0.5) / 10));
 }
 
 test('股票初始价 = 地价 ÷ 10 × 2；买入受 6 股/3 城/单城 2 股限制（地价≥15000 单次 1 股）', () => {
@@ -69,7 +69,7 @@ test('股息：所有者过起点时按总价值×10% 派发', () => {
   state.players[0].cities.push('上海');
   state.stocks['上海'].holders['p1'] = 3;
   state.players[0].position = 40;
-  const rng = diceRng([3, 3]); // 3+3=6 → 40+6=46 → 4（跨过起点）
+  const rng = diceRng([6]); // 6 → 40+6=46 → 4（跨过起点）
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.players[0].cash, 150000 + 5000);
   assert.strictEqual(state.players[1].cash, 150000 + 300); // 3/20 × 2000

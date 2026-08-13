@@ -52,7 +52,7 @@ test('端到端：创建/加入/开始/首个操作回合可运行', async () =>
   const gs2P = once(a, 'gameState');
   a.emit('action', { type: 'roll_dice' });
   const s2 = await gs2P;
-  assert.ok(s2.dice && s2.dice.length === 2);
+  assert.ok(s2.dice >= 1 && s2.dice <= 10);
 
   a.close();
   b.close();

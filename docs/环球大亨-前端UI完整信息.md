@@ -53,7 +53,7 @@
     - 事件记录卡：`#log`（显示所有玩家的完整事件记录）。
     - `.side-ops`：`#btnStock`（股票市场）、`#btnSurrender`（认输）、`#btnDisband`（解散房间）。
 - `#actionBar`（底部操作栏，桌游 HUD 质感）：
-  - `#dice`：骰子显示（`骰子 X + Y` 或 `骰子 · 待掷`）。
+  - `#dice`：骰子显示（单骰 1–10，`骰子 X` 或 `骰子 · 待掷`）。
   - `#turnInfo`：当前回合：XX（第 N 轮）。
   - `#btnRoll`（主按钮）掷骰子、`#btnAssets`（次按钮）查看资产、`#btnBank`（次按钮）银行、`#btnEndTurn`（次按钮，非本人回合 disabled）。
   - `#timer`：右下角倒计时（⏱ Ns）。
@@ -217,7 +217,7 @@ me（昵称/房间码/游戏内 id）、game（最新 gameState）、awaitingPla
 
 ### 6.3 gameState 主要字段
 
-- `roomCode, status('playing'/'over'), rounds, turnIndex, phase, pending, dice:[a,b]`
+- `roomCode, status('playing'/'over'), rounds, turnIndex, phase, pending, dice:number(1–10)`
 - `players[]`：`{id,name,seat,color,cash,position,alive,jailed,jailTurns,frozen,cities[],airports[],stocks{城:股},connected,socketId,transferDone}`
 - `board[]`：`{id,type,name?,cityId?,price?,group?,airportId?}`
 - `cities{}`：`{id,name,country,continent,ownerId,houseLevel,mortgaged,price,group,mortgageInterest}`
@@ -249,7 +249,7 @@ waiting_roll、frozen_turn、jail_turn、buy、buy_airport、flight、stock、tr
 
 ## 8. 游戏内规则速查（#rulesBody 文案）
 
-目标、回合（双骰、双数连掷、三双入狱、跨起点 +5000 与股息与股票窗口）、地产（租金=地价×(30%+等级×30%)，地价≥15000 的城市满级 +10%；经过自有城建/拆 1 级）、城市交易（直接出售总价值成交、卖家得 80%；拍卖起拍 75%、加价至少 1000）、抵押（总价值 50%、最多 2 座、每轮 5% 利息）、机场（15000、机场费 3000×拥有数、机票=距离×500）、极地/监狱（冰冻付 5000 解除；21 号监狱付 15000 或掷双数提前出狱、一直放弃则关满 3 回合后自动释放（无需缴费）；11/32 号监狱关押 1 回合（下一回合跳过、再下一回合自动释放））、股票（每城 20 股、1 股 = 5%、初始股价 = 地价 ÷ 10 × 2，仅起点可买卖、租客持股阶梯减免）、机会卡 40 张图鉴（奖励 15/罚款 15/位移 9/入狱 1，金额与名称全列）。
+目标、回合（单骰 1–10、跨起点 +5000 与股息与股票窗口）、地产（租金=地价×(30%+等级×30%)，地价≥15000 的城市满级 +10%；经过自有城建/拆 1 级）、城市交易（直接出售总价值成交、卖家得 80%；拍卖起拍 75%、加价至少 1000）、抵押（总价值 50%、最多 2 座、每轮 5% 利息）、机场（15000、机场费 3000×拥有数、机票=距离×500）、极地/监狱（冰冻付 5000 解除；21 号监狱付 15000 或掷出 1/10 提前出狱、一直放弃则关满 3 回合后自动释放（无需缴费）；11/32 号监狱关押 1 回合（下一回合跳过、再下一回合自动释放））、股票（每城 20 股、1 股 = 5%、初始股价 = 地价 ÷ 10 × 2，仅起点可买卖、租客持股阶梯减免）、机会卡 40 张图鉴（奖励 15/罚款 15/位移 9/入狱 1，金额与名称全列）。
 
 ## 9. 已知约束与设计决策（重要）
 

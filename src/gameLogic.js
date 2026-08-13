@@ -571,7 +571,7 @@ function startAuction(state, cityId, sellerId, events, rng, extra) {
   }
   // 掷骰定出价顺序（点数高者先）
   const rolls = {};
-  for (const pid of state.pending.order) rolls[pid] = rollDice(rng)[0];
+  for (const pid of state.pending.order) rolls[pid] = rollDice(rng);
   state.pending.order.sort((a, b) => rolls[b] - rolls[a]);
   state.phase = 'auction';
   log(events, `${cityLabel(state, cityId)} 进入拍卖，起拍价 ${Math.round(cityTotalValue(state.cities[cityId]) * 0.75)}`, 'auction');
@@ -825,30 +825,10 @@ function apply(state, action, rng) {
 // ---------- 动作实现 ----------
 
 function rollAction(state, p, events, rng) {
-  const dice = rollDice(rng);
-  state.dice = dice;
-  const isDouble = dice[0] === dice[1];
-  log(events, `${p.name} 掷出 ${dice[0]} + ${dice[1]}`);
-  if (isDouble) {
-    p.consecutiveDoubles = (p.consecutiveDoubles || 0) + 1;
-    if (p.consecutiveDoubles >= 3) {
-      p.consecutiveDoubles = 0;
-      p.jailed = true;
-      p.jailTurns = 0;
-      p.position = nearestPrevJail(p.position);
-      log(events, `${p.name} 连续三次双数，直接入狱（${p.position} 号，${jailLimitFor(p.position)} 回合）`, 'jail');
-      if (jailLimitFor(p.position) === 1) {
-        endTurn(state, events, rng);
-      } else {
-        state.phase = 'jail_turn';
-        state.pending = { playerId: p.id, kind: 'jail' };
-      }
-      return;
-    }
-  } else {
-    p.consecutiveDoubles = 0;
-  }
-  const steps = dice[0] + dice[1];
+  const roll = rollDice(rng);
+  state.dice = roll;
+  log(events, `${p.name} 掷出 ${roll}`);
+  const steps = roll;
   const oldPos = p.position;
   p.position = (p.position + steps) % 42;
   const crossedGo = oldPos + steps >= 42;
@@ -884,16 +864,16 @@ function jailAction(state, p, action, events, rng) {
     endTurn(state, events, rng);
     return;
   }
-  // 掷骰出狱
-  const dice = rollDice(rng);
-  state.dice = dice;
-  if (dice[0] === dice[1]) {
+  // 掷骰出狱：掷出 1 或 10 出狱并移动
+  const roll = rollDice(rng);
+  state.dice = roll;
+  if (roll === 1 || roll === 10) {
     p.jailed = false;
     p.jailTurns = 0;
-    const steps = dice[0] + dice[1];
+    const steps = roll;
     const oldPos = p.position;
     p.position = (p.position + steps) % 42;
-    log(events, `${p.name} 掷出 ${dice[0]} + ${dice[1]}（双数）出狱并移动`);
+    log(events, `${p.name} 掷出 ${roll}（1 或 10）出狱并移动`);
     if (oldPos + steps >= 42) {
       settleGo(state, p, events);
       openStockWindow(state, p, events, 'land');
@@ -910,7 +890,7 @@ function jailAction(state, p, action, events, rng) {
     return;
   }
   p.jailTurns += 1;
-  log(events, `${p.name} 掷出 ${dice[0]}+${dice[1]}，未出狱（第 ${p.jailTurns} 回合）`);
+  log(events, `${p.name} 掷出 ${roll}，未出狱（第 ${p.jailTurns} 回合）`);
   endTurn(state, events, rng);
 }
 
@@ -1436,10 +1416,6 @@ function enforceOwnerStockCap(state, p, cityId, events) {
 // ---------- 回合结束 ----------
 
 function endTurn(state, events, rng) {
-  const p = currentPlayer(state);
-  if (p) {
-    p.consecutiveDoubles = 0;
-  }
   advanceTurn(state, events, rng);
 }
 

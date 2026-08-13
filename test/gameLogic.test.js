@@ -11,7 +11,7 @@ function fakeRng(seq) {
 }
 // 按骰子点数生成 rng 序列
 function diceRng(diceList) {
-  return fakeRng(diceList.map((d) => (d - 1 + 0.5) / 6));
+  return fakeRng(diceList.map((d) => (d - 1 + 0.5) / 10));
 }
 function twoPlayerState() {
   return createGameState('TEST01', ['甲', '乙']);
@@ -20,7 +20,7 @@ function twoPlayerState() {
 test('购买：落在无主城市进入购买阶段，购买后归属与资金正确', () => {
   const state = twoPlayerState();
   state.rounds = 2; // 第二轮起才可购买
-  const rng = diceRng([1, 1]); // 掷出 1+1=2 → 2 号开普敦（无主）
+  const rng = diceRng([2]); // 掷出 2 → 2 号开普敦（无主）
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.phase, 'buy');
   assert.strictEqual(state.pending.cityId, '开普敦');
@@ -38,7 +38,7 @@ test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2
   state.players[0].position = 40;
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
-  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 40+6=46 → 4，跨过起点
+  logic.apply(state, { type: 'roll_dice' }, diceRng([6])); // 40+6=46 → 4，跨过起点
   assert.strictEqual(state.lapLeaderId, 'p0'); // 甲资产最高，锁定为本圈领先者
   assert.strictEqual(state.players[0].lapDone, false); // 快照后重置
   // 甲（领先者）每圈限购 2 座
@@ -67,7 +67,7 @@ test('第一轮不能购买城市，第二轮起可购买', () => {
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
   // 第一轮（rounds=0）落到开普敦（2 号）
-  let r = logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1]));
+  let r = logic.apply(state, { type: 'roll_dice' }, diceRng([2]));
   assert.notStrictEqual(state.phase, 'buy'); // 不进入购买
   assert.strictEqual(state.cities['开普敦'].ownerId, null);
   assert.strictEqual(state.turnIndex, 1); // 回合结束，轮到乙
@@ -77,7 +77,7 @@ test('第一轮不能购买城市，第二轮起可购买', () => {
   state.rounds = 2;
   state.players[0].position = 0;
   state.phase = 'waiting_roll';
-  r = logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1]));
+  r = logic.apply(state, { type: 'roll_dice' }, diceRng([2]));
   assert.strictEqual(state.phase, 'buy');
   assert.strictEqual(state.pending.cityId, '开普敦');
 });
@@ -108,7 +108,7 @@ test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () =>
   state.players[0].position = 40;
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
-  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 3+3=6 → 46 → 4，跨过起点
+  logic.apply(state, { type: 'roll_dice' }, diceRng([6])); // 6 → 46 → 4，跨过起点
   assert.strictEqual(state.players[0].lapBuys, 0);
 });
 
@@ -122,7 +122,7 @@ test('领先者限购：所有玩家经过起点后锁定资产最高者限购 2
   state.players[0].position = 40;
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
-  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 40+6=46 → 4，跨过起点
+  logic.apply(state, { type: 'roll_dice' }, diceRng([6])); // 40+6=46 → 4，跨过起点
   assert.strictEqual(state.lapLeaderId, 'p0'); // 甲资产最高，锁定为本圈领先者
   assert.strictEqual(state.players[0].lapDone, false); // 快照后重置
   // 甲（领先者）每圈限购 2 座
@@ -170,7 +170,7 @@ test('每圈限购 4 座城市：第 5 座被拒绝，跨过起点重置', () =>
   state.players[0].position = 40;
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
-  logic.apply(state, { type: 'roll_dice' }, diceRng([3, 3])); // 3+3=6 → 46 → 4，跨过起点
+  logic.apply(state, { type: 'roll_dice' }, diceRng([6])); // 6 → 46 → 4，跨过起点
   assert.strictEqual(state.players[0].lapBuys, 0);
 });
 
@@ -183,7 +183,7 @@ test('高价城满级租金额外加成：地价≥15000 满级 +10%', () => {
   state.turnIndex = 1;
   state.phase = 'waiting_roll';
   state.players[1].position = 34;
-  logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1])); // 34+2=36 上海
+  logic.apply(state, { type: 'roll_dice' }, diceRng([2])); // 34+2=36 上海
   // 20000 × 150% × 110% = 33000
   assert.strictEqual(state.players[1].cash, 150000 - 33000);
   assert.strictEqual(state.players[0].cash, 150000 + 33000);
@@ -201,7 +201,7 @@ test('收租：路过他人城市支付租金（整数）', () => {
   state.turnIndex = 1;
   state.phase = 'waiting_roll';
   state.players[1].position = 3;
-  const rng = diceRng([1, 1]); // 1+1=2 → 5 号开罗（甲的）
+  const rng = diceRng([2]); // 3+2=5 号开罗（甲的）
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.players[1].position, 5);
   assert.strictEqual(state.players[1].cash, 150000 - 1800);
@@ -217,7 +217,7 @@ test('股票抵扣：持股阶梯减免租金，银行补足拥有者', () => {
     state.turnIndex = 1;
     state.phase = 'waiting_roll';
     state.players[1].position = 3;
-    logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1])); // 3+2 → 5 号开罗
+    logic.apply(state, { type: 'roll_dice' }, diceRng([2])); // 3+2 → 5 号开罗
     return state;
   };
   // 5 股 = 25% → 减 10%
@@ -289,19 +289,9 @@ test('机会卡：抽到奖励卡获得金额', () => {
   const state = twoPlayerState();
   state.chanceDeck = [state.chanceDeck.find((c) => c.type === 'reward' && c.amount === 8000)];
   state.players[0].position = 1;
-  const rng = diceRng([1, 1]); // 1+1=2 → 3 号机会卡
+  const rng = diceRng([2]); // 1+2=3 号机会卡
   logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.players[0].cash, 150000 + 8000);
-});
-
-test('监狱：连续三次双数入狱，位置为最近上一个入狱格', () => {
-  const state = twoPlayerState();
-  state.players[0].position = 30;
-  state.players[0].consecutiveDoubles = 2;
-  const rng = diceRng([1, 1]);
-  logic.apply(state, { type: 'roll_dice' }, rng);
-  assert.strictEqual(state.players[0].jailed, true);
-  assert.strictEqual(state.players[0].position, 21);
 });
 
 test('拍卖：最高出价者不能给自己加价（防止死循环）', () => {
@@ -345,7 +335,7 @@ test('建房：购买后需再次到达才能建房', () => {
   state.turnIndex = 0;
   state.phase = 'waiting_roll';
   state.players[0].position = 3;
-  logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1])); // 3+2=5 号开罗
+  logic.apply(state, { type: 'roll_dice' }, diceRng([2])); // 3+2=5 号开罗
   assert.strictEqual(state.cities['开罗'].buildReady, true);
 });
 
@@ -702,9 +692,9 @@ test('购买机场后下一位玩家可正常掷骰（回合切换清空 pending
   assert.strictEqual(state.phase, 'waiting_roll');
   assert.strictEqual(state.turnIndex, 1);
   assert.strictEqual(state.pending, null);
-  const res = logic.apply(state, { type: 'roll_dice' }, diceRng([1, 1]));
+  const res = logic.apply(state, { type: 'roll_dice' }, diceRng([1]));
   assert.strictEqual(res.rejected, undefined);
-  assert.ok(state.dice && state.dice.length === 2);
+  assert.ok(typeof state.dice === 'number' && state.dice >= 1 && state.dice <= 10);
 });
 
 
@@ -742,7 +732,7 @@ test('监狱：放弃出狱判定跳过回合，第 3 回合自动释放（免�
 });
 
 
-test('监狱：掷双数出狱事件包含具体点数', () => {
+test('监狱：掷出 1 或 10 出狱事件包含具体点数', () => {
   const state = twoPlayerState();
   state.players[0].jailed = true;
   state.players[0].jailTurns = 0;
@@ -750,10 +740,10 @@ test('监狱：掷双数出狱事件包含具体点数', () => {
   state.players[0].position = 21;
   state.phase = 'jail_turn';
   state.pending = { playerId: 'p0', kind: 'jail' };
-  const rng = diceRng([3, 3]); // 掷出 3 + 3
+  const rng = diceRng([1]); // 掷出 1（幸运点数）
   const res = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, rng);
   assert.strictEqual(state.players[0].jailed, false);
-  assert.ok(res.events.some((e) => e.text.includes('3 + 3') && e.text.includes('出狱并移动')));
+  assert.ok(res.events.some((e) => e.text.includes('1 或 10') && e.text.includes('出狱并移动')));
 });
 
 
@@ -762,31 +752,31 @@ test('监狱：双方先后入狱后，狱中玩家掷骰出狱可继续推进',
   state.rounds = 2; // 第二轮起，出狱落点可正常结算购买
   state.players[0].cash = 200000;
   state.players[1].cash = 200000;
-  // 甲在狱中：掷 1+4 失败，轮到乙
+  // 甲在狱中：掷 5 失败，轮到乙
   state.players[0].jailed = true;
   state.players[0].jailTurns = 0;
   state.players[0].position = 21;
   state.phase = 'jail_turn';
   state.pending = { playerId: 'p0', kind: 'jail' };
-  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1, 2]));
+  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([5]));
   assert.strictEqual(state.players[0].jailTurns, 1);
   assert.strictEqual(state.turnIndex, 1);
   assert.strictEqual(state.phase, 'waiting_roll');
-  // 乙在 23 号位掷 1+2 到 26 号机会卡格，卡池第一张为「直接入狱」→ 21 号监狱（3 回合）
+  // 乙在 23 号位掷 3 到 26 号机会卡格，卡池第一张为「直接入狱」→ 21 号监狱（3 回合）
   state.players[1].position = 23;
   state.chanceDeck.unshift({ type: 'jail', name: '直接入狱' });
-  r = logic.apply(state, { type: 'roll_dice' }, diceRng([1, 2]));
+  r = logic.apply(state, { type: 'roll_dice' }, diceRng([3]));
   assert.strictEqual(state.players[1].jailed, true);
   assert.strictEqual(state.phase, 'jail_turn');
   assert.strictEqual(state.pending.playerId, 'p1');
   assert.strictEqual(state.turnIndex, 1);
   assert.ok(r.events.some((e) => e.text.includes('直接入狱')));
-  // 乙在狱中掷出 2+2 双数出狱并移动，对局继续
-  r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([2, 2]));
+  // 乙在狱中掷出 1（幸运点数）出狱并移动，对局继续
+  r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1]));
   assert.strictEqual(state.players[1].jailed, false);
   assert.strictEqual(state.players[1].jailTurns, 0);
   assert.notStrictEqual(state.phase, 'jail_turn');
-  assert.ok(r.events.some((e) => e.text.includes('2 + 2') && e.text.includes('出狱并移动')));
+  assert.ok(r.events.some((e) => e.text.includes('1 或 10') && e.text.includes('出狱并移动')));
 });
 
 
@@ -796,7 +786,7 @@ test('监狱：11/32 号监狱关押 1 回合，下回合自动释放', () => {
   state.players[0].cash = 200000;
   state.players[0].position = 9;
   state.phase = 'waiting_roll';
-  const rng = diceRng([1, 1]); // 9 号 + 1+1 → 11 号监狱
+  const rng = diceRng([2]); // 9 号 + 2 → 11 号监狱
   let r = logic.apply(state, { type: 'roll_dice' }, rng);
   assert.strictEqual(state.players[0].jailed, true);
   assert.strictEqual(state.players[0].position, 11);
@@ -825,7 +815,7 @@ test('监狱：11/32 号监狱关押 1 回合，下回合自动释放', () => {
   s2.players[0].position = 0;
   s2.chanceDeck.unshift({ type: 'jail', name: '直接入狱' });
   s2.phase = 'waiting_roll';
-  r = logic.apply(s2, { type: 'roll_dice' }, diceRng([1, 2])); // 3 号机会卡 → 抽入狱卡 → 32 号
+  r = logic.apply(s2, { type: 'roll_dice' }, diceRng([3])); // 3 号机会卡 → 抽入狱卡 → 32 号
   assert.strictEqual(s2.players[0].jailed, true);
   assert.strictEqual(s2.players[0].position, 32);
   assert.notStrictEqual(s2.phase, 'jail_turn');
@@ -840,7 +830,7 @@ test('监狱与极地互锁：双方先后受困，放弃/掷骰循环后正常�
   state.players[1].frozen = true; state.players[1].position = 14;
   state.phase = 'jail_turn'; state.pending = { playerId: 'p0', kind: 'jail' }; state.turnIndex = 0;
   // 甲掷骰失败 → 轮到乙（冰冻）
-  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([1, 2]));
+  let r = logic.apply(state, { type: 'respond_jail', decision: 'roll' }, diceRng([5]));
   assert.strictEqual(r.rejected, undefined);
   assert.strictEqual(state.phase, 'frozen_turn');
   assert.strictEqual(state.pending.playerId, 'p1');
