@@ -658,7 +658,7 @@ function setupLobby() {
   };
   $('btnSurrender').onclick = () => { if (confirm('确认认输？')) socket.emit('action', { type: 'surrender' }); };
   $('btnDisband').onclick = () => { if (confirm('解散房间？')) socket.emit('disbandRoom'); };
-  $('btnStock').onclick = () => { renderStock(); $('stockModal').classList.remove('hidden'); };
+  $('btnStock').onclick = () => { if (game && game.phase !== 'stock') { toast('仅经过起点时可交易（跨过/停在起点会自动弹出）'); return; } renderStock(); $('stockModal').classList.remove('hidden'); };
   $('btnStockClose').onclick = () => { socket.emit('action', { type: 'stock_done' }); $('stockModal').classList.add('hidden'); stockDraft = {}; };
   $('btnStockSkip').onclick = () => { socket.emit('action', { type: 'stock_done' }); $('stockModal').classList.add('hidden'); stockDraft = {}; };
   $('btnStockConfirm').onclick = submitStock;
@@ -828,8 +828,9 @@ function renderStock() {
     const div = document.createElement('div');
     div.className = 'stock-item';
     const held = meP ? (meP.stocks[cityId] || 0) : 0;
-    div.innerHTML = '<b>' + (city.country ? city.country + '·' : '') + cityId + '</b><span class="mono">股价 ' + st.price + '</span><span>持有 ' + held + ' 股' + (locked ? '（锁定）' : '') + '</span>';
-    if (!locked && game.phase === 'stock' && isMyTurn()) {
+    const myCityCap = city.ownerId === me.gameId && held >= 1;
+    div.innerHTML = '<b>' + (city.country ? city.country + '·' : '') + cityId + '</b><span class="mono">股价 ' + st.price + '</span><span>持有 ' + held + ' 股' + (locked || myCityCap ? '（锁定' + (myCityCap ? '：本城最多持有 1 股' : '') + '）' : '') + '</span>';
+    if (!locked && !myCityCap && game.phase === 'stock' && isMyTurn()) {
       const d = stockDraft[cityId] || { buy: 0, sell: 0 };
       const stp = document.createElement('div');
       stp.className = 'stepper';
