@@ -14,6 +14,7 @@ const SUB_TIMEOUT = 60 * 1000;
 const HOST_TRANSFER_MS = 10 * 60 * 1000;
 
 const app = express();
+app.get('/healthz', (req, res) => res.send('ok')); // Render 健康检查
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const io = new Server(server);
