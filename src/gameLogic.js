@@ -11,6 +11,9 @@ const FREEZE_FINE = 5000;
 const AIRPORT_PRICE = 15000;
 const MORTGAGE_MAX = 2;
 const MORTGAGE_INTEREST = 0.05;
+const BANKRUPT_RELIEF = 5000; // 破产时给其余存活玩家的救济金
+const LATE_JAIL_ROUND = 80; // 第 80 轮后 21 号监狱满 3 回合开始收出狱费
+const LATE_JAIL_FEE_RATIO = 0.3; // 出狱费比例
 
 // ---------- helpers ----------
 
@@ -154,12 +157,20 @@ function advanceTurn(state, events, rng) {
       state.phase = 'waiting_roll';
       state.pending = null;
     } else if (p.jailTurns >= 3) {
-      // 21 号监狱：关满 3 回合后自动释放（出狱费仅用于提前出狱，非强制）
+      // 21 号监狱：关满 3 回合后自动释放；第 80 轮后需缴纳 30% 出狱费
       p.jailed = false;
       p.jailTurns = 0;
-      log(events, `${p.name} 关押满 3 回合，自动释放`, 'jail');
-      state.phase = 'waiting_roll';
-      state.pending = null;
+      if (state.rounds > LATE_JAIL_ROUND) {
+        const fee = Math.round(JAIL_FINE * LATE_JAIL_FEE_RATIO);
+        p.cash -= fee;
+        log(events, `${p.name} 关押满 3 回合，缴纳 30% 出狱费 ${fee} 出狱（80 轮后）`, 'jail');
+        if (p.cash < 0) startSelfRescue(state, p, -p.cash, events, `出狱费`);
+        else { state.phase = 'waiting_roll'; state.pending = null; }
+      } else {
+        log(events, `${p.name} 关押满 3 回合，自动释放`, 'jail');
+        state.phase = 'waiting_roll';
+        state.pending = null;
+      }
     } else {
       state.phase = 'jail_turn';
       state.pending = { playerId: p.id, kind: 'jail' };
@@ -410,6 +421,11 @@ function bankrupt(state, player, events, rng) {
   player.alive = false;
   if (!state.rank.includes(player.id)) state.rank.push(player.id);
   log(events, `${player.name} 破产出局`, 'bankrupt');
+  // 其余存活玩家各获得小额救济金（由银行支付）
+  for (const other of state.players) {
+    if (other.alive && other.id !== player.id) other.cash += BANKRUPT_RELIEF;
+  }
+  log(events, `${player.name} 破产，其余玩家各获得救济金 ${BANKRUPT_RELIEF}`, 'bankrupt');
   // 未赎回抵押城市归银行
   const toAuction = [];
   for (const cityId of player.cities) {
@@ -447,6 +463,10 @@ function surrenderLiquidation(state, player, events, rng) {
   player.alive = false;
   if (!state.rank.includes(player.id)) state.rank.push(player.id);
   log(events, `${player.name} 认输，资产直接归银行`, 'bankrupt');
+  for (const other of state.players) {
+    if (other.alive && other.id !== player.id) other.cash += BANKRUPT_RELIEF;
+  }
+  log(events, `${player.name} 认输，其余玩家各获得救济金 ${BANKRUPT_RELIEF}`, 'bankrupt');
   for (const cityId of player.cities) {
     const c = state.cities[cityId];
     c.ownerId = null;

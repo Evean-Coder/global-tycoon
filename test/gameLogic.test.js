@@ -234,7 +234,7 @@ test('破产：拍卖中另一玩家出价获得后结算胜负', () => {
   assert.strictEqual(state.status, 'over');
   assert.strictEqual(state.winner, 'p1');
   assert.strictEqual(state.cities['开罗'].ownerId, 'p1');
-  assert.strictEqual(state.players[1].cash, 150000 - 4500);
+  assert.strictEqual(state.players[1].cash, 150000 + 5000 - 4500); // 破产救济金 5000 + 拍得开罗
 });
 
 test('破产：押质城市归银行不进拍卖', () => {
@@ -295,6 +295,45 @@ test('自救：抵押凑够金额自动结束自救，未凑够留在自救界�
   logic.apply(s2, { type: 'rescue_mortgage', cityId: '内罗毕' }, fakeRng([0.5]));
   assert.strictEqual(s2.players[0].cash, -200);
   assert.strictEqual(s2.phase, 'self_rescue');
+});
+
+
+test('破产救济金：破产后其余玩家各获得 5000', () => {
+  const state = twoPlayerState();
+  state.players[0].cash = -50000;
+  state.phase = 'self_rescue';
+  state.pending = { playerId: 'p0', kind: 'self_rescue', due: 50000, reason: '租金', resume: false };
+  logic.apply(state, { type: 'rescue_done' }, fakeRng([0.5]));
+  assert.strictEqual(state.status, 'over');
+  assert.strictEqual(state.winner, 'p1');
+  assert.strictEqual(state.players[1].cash, 150000 + 5000);
+});
+
+
+test('监狱：80 轮后 21 号监狱满 3 回合缴纳 30% 出狱费', () => {
+  const state = twoPlayerState();
+  state.rounds = 90;
+  state.players[0].jailed = true;
+  state.players[0].jailTurns = 3;
+  state.players[0].cash = 200000;
+  state.players[0].position = 21;
+  state.turnIndex = 1;
+  state.phase = 'waiting_roll';
+  const evs = [];
+  logic.advanceTurn(state, evs, fakeRng([0.5]));
+  assert.strictEqual(state.players[0].jailed, false);
+  assert.strictEqual(state.players[0].cash, 200000 - 4500); // 15000 × 30%
+  assert.strictEqual(state.phase, 'waiting_roll');
+  assert.ok(evs.some((e) => e.text.includes('30% 出狱费')));
+  // 80 轮以内仍免费
+  const s2 = twoPlayerState();
+  s2.players[0].jailed = true;
+  s2.players[0].jailTurns = 3;
+  s2.players[0].cash = 200000;
+  s2.players[0].position = 21;
+  s2.turnIndex = 1;
+  logic.advanceTurn(s2, [], fakeRng([0.5]));
+  assert.strictEqual(s2.players[0].cash, 200000);
 });
 
 
