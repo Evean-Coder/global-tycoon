@@ -15,7 +15,7 @@ function diceRng(diceList) {
   return f;
 }
 
-test('股票初始价 = 地价 ÷ 10 × 2；买入受 6 股/3 城/单城 2 股限制（地价≥15000 单次 1 股）', () => {
+test('股票初始价 = 地价 ÷ 10 × 2；买入受 6 股/3 城/单城 2 股限制', () => {
   const state = createGameState('TEST01', ['甲', '乙']);
   const p = state.players[0];
   state.phase = 'stock';
@@ -38,15 +38,14 @@ test('股票初始价 = 地价 ÷ 10 × 2；买入受 6 股/3 城/单城 2 股�
       { cityId: '迪拜', side: 'buy', shares: 1 },
       { cityId: '纽约', side: 'buy', shares: 2 },
       { cityId: '开罗', side: 'buy', shares: 2 },
-      { cityId: '伦敦', side: 'buy', shares: 2 },
     ],
   }, fakeRng([0.5]));
-  // 纽约（地价≥15000）单次 2 股被跳过，其余订单正常执行
-  assert.strictEqual(p.cash, cashBefore - 3000 - 2400 - 5600);
-  assert.strictEqual(p.stocks['纽约'] || 0, 0);
+  // 高价城（纽约，地价≥15000）单次可买 2 股，与其他城市一致
+  assert.strictEqual(p.cash, cashBefore - 3000 - 7600 - 2400);
+  assert.strictEqual(p.stocks['纽约'], 2);
   assert.strictEqual(p.stocks['迪拜'], 1);
   assert.strictEqual(p.stocks['开罗'], 2);
-  assert.strictEqual(p.stocks['伦敦'], 2);
+  assert.strictEqual(p.stocks['伦敦'] || 0, 0);
 });
 
 test('股价联动：购买城市 +10%，上限为初始的 2 倍', () => {

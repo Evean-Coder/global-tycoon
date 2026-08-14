@@ -31,7 +31,7 @@ function closeServer() {
       } else {
         resolve();
       }
-    } catch (e) { resolve(); }
+    } catch { resolve(); }
   });
 }
 
@@ -45,10 +45,10 @@ async function waitFor(fn, timeout = 3000) {
 }
 
 test.afterEach(async () => {
-  for (const s of sockets) { try { s.close(); } catch (e) {} }
+  for (const s of sockets) { try { s.close(); } catch {} }
   sockets.length = 0;
   for (const code of [...rooms.keys()]) rooms.delete(code);
-  for (const d of tmpDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) {} }
+  for (const d of tmpDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
   tmpDirs.length = 0;
   await closeServer();
 });
@@ -87,7 +87,7 @@ test('集成：全员离线清扫删除房间并落盘 idle_timeout 记录', asy
   assert.strictEqual(rec.endReason, 'idle_timeout');
   assert.strictEqual(rec.roomCode, code);
   assert.strictEqual(rec.players.length, 2);
-  try { fs.unlinkSync(recFile); } catch (e) {}
+  try { fs.unlinkSync(recFile); } catch {}
 });
 
 test('集成：对局中有人在线时清扫不删除房间', async () => {

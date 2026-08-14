@@ -80,10 +80,10 @@ function buildChanceDeck() {
     [4000, 4, ['超速罚款', '噪音扰民', '违章改建', '拖欠物业费']],
     [2000, 8, ['停车费', '乱扔垃圾', '违规摆摊', '宠物随地便溺', '破坏公共设施', '逾期交通罚单', '违规鸣笛', '遗失证照补办']],
   ];
-  for (const [amount, count, names] of reward) {
+  for (const [amount, , names] of reward) {
     for (const name of names) deck.push({ type: 'reward', amount, name });
   }
-  for (const [amount, count, names] of fine) {
+  for (const [amount, , names] of fine) {
     for (const name of names) deck.push({ type: 'fine', amount, name });
   }
   for (let i = 0; i < 3; i++) deck.push({ type: 'move', delta: 3, name: '前进 3 格' });

@@ -1,7 +1,7 @@
 'use strict';
 
 const { buildBoard, buildChanceDeck } = require('./board');
-const { createRng, shuffle } = require('./random');
+const { shuffle } = require('./random');
 
 const START_CASH = 150000;
 const PLAYER_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835'];

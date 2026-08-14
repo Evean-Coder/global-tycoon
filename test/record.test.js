@@ -117,12 +117,12 @@ test('集成：中途解散房间时广播完整对局记录', async () => {
   const recDir = path.join(__dirname, '..', 'records');
   const recFile = path.join(recDir, rec.roomCode + '-' + rec.startedAt + '.json');
   assert.strictEqual(fs.existsSync(recFile), true);
-  try { fs.unlinkSync(recFile); } catch (e) {}
+  try { fs.unlinkSync(recFile); } catch {}
 }, { timeout: 25000 });
 
 test.afterEach(() => {
-  for (const sock of spawnedSockets) { try { sock.close(); } catch (e) {} }
-  for (const child of spawnedChildren) { try { child.kill(); } catch (e) {} }
+  for (const sock of spawnedSockets) { try { sock.close(); } catch {} }
+  for (const child of spawnedChildren) { try { child.kill(); } catch {} }
   spawnedSockets.length = 0;
   spawnedChildren.length = 0;
 });

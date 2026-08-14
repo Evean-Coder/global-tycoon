@@ -36,7 +36,7 @@ for (const f of files) {
     const r = JSON.parse(fs.readFileSync(f, 'utf8'));
     if (r && r.schema && r.schema.indexOf('global-tycoon.game-record') === 0) records.push(r);
     else console.warn('跳过非对局记录文件: ' + path.basename(f));
-  } catch (e) {
+  } catch {
     console.warn('跳过无法解析的文件: ' + path.basename(f));
   }
 }
@@ -203,7 +203,7 @@ function printDetail(file) {
   let r;
   try {
     r = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (e) {
+  } catch {
     console.error('无法解析文件: ' + file);
     process.exit(1);
   }

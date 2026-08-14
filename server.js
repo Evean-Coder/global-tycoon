@@ -144,10 +144,6 @@ function finalizeGame(room, endReason) {
   return room.gameRecord;
 }
 
-function findPlayer(room, socketId) {
-  return room.players.find((p) => p.socketId === socketId);
-}
-
 function clearTimer(room, key) {
   const t = room.timers.get(key);
   if (t) clearTimeout(t);
@@ -389,7 +385,7 @@ io.on('connection', (socket) => {
 function totalAssets(state, player) {
   let cash = player.cash;
   for (const cityId of player.cities) cash += logic.cityTotalValue(state.cities[cityId]);
-  for (const airportId of player.airports) cash += 15000;
+  cash += (player.airports || []).length * 15000;
   for (const cityId of Object.keys(state.stocks)) cash += (state.stocks[cityId].holders[player.id] || 0) * state.stocks[cityId].price;
   return cash;
 }

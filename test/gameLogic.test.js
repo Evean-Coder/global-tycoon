@@ -890,3 +890,15 @@ test('飞行到无主机场不触发购买，直接结束回合', () => {
   assert.strictEqual(state.phase, 'waiting_roll');
   assert.strictEqual(state.airports['伦敦希思罗国际机场'].ownerId, null);
 });
+test('监狱：落到 21 号监狱当回合直接结束回合，不弹掷骰出狱窗口', () => {
+  const state = twoPlayerState();
+  state.players[0].position = 20; // 掷 1 落到 21 号监狱
+  state.players[0].cash = 200000;
+  state.phase = 'waiting_roll';
+  logic.apply(state, { type: 'roll_dice' }, diceRng([1]));
+  assert.strictEqual(state.players[0].jailed, true);
+  assert.strictEqual(state.players[0].jailTurns, 0);
+  assert.notStrictEqual(state.phase, 'jail_turn'); // 当回合不弹窗
+  assert.strictEqual(state.phase, 'waiting_roll'); // 直接轮到下一位
+  assert.strictEqual(state.turnIndex, 1);
+});

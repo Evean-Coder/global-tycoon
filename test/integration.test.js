@@ -81,9 +81,7 @@ test('子流程顺序：拍卖轮到非当前回合玩家时可正常出价', as
   await new Promise((resolve) => b.emit('joinRoom', { roomCode: code, name: '乙' }, resolve));
   await joinRsP; // 消费加入时的 roomState，避免与断线广播竞争
   let lastA = null;
-  let lastB = null;
   a.on('gameState', (s) => { lastA = s; });
-  b.on('gameState', (s) => { lastB = s; });
   const waitFor = async (fn, timeout = 6000) => {
     const t0 = Date.now();
     while (Date.now() - t0 < timeout) {
@@ -331,8 +329,8 @@ test('在线玩家可用令牌顶替重连（网络抖动/快速刷新恢复）'
 }, { timeout: 30000 });
 
 test.afterEach(() => {
-  for (const sock of spawnedSockets) { try { sock.close(); } catch (e) {} }
-  for (const child of spawnedChildren) { try { child.kill(); } catch (e) {} }
+  for (const sock of spawnedSockets) { try { sock.close(); } catch {} }
+  for (const child of spawnedChildren) { try { child.kill(); } catch {} }
   spawnedSockets.length = 0;
   spawnedChildren.length = 0;
 });

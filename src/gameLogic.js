@@ -99,14 +99,6 @@ function jailLimitFor(pos) {
   return pos === 21 ? 3 : 1;
 }
 
-function seatOrderIds(state, fromId) {
-  const ids = state.players.map((p) => p.id);
-  const start = ids.indexOf(fromId);
-  const order = [];
-  for (let i = 1; i < ids.length; i++) order.push(ids[(start + i) % ids.length]);
-  return order;
-}
-
 function playerById(state, id) {
   return state.players.find((p) => p.id === id);
 }
@@ -131,7 +123,7 @@ function sharesOf(state, playerId, cityId) {
 
 // ---------- 回合推进 ----------
 
-function advanceTurn(state, events, rng) {
+function advanceTurn(state, events, _rng) {
   if (state.turnIndex === 0) state.rounds++;
   for (const p of state.players) {
     if (!p.alive) continue;
@@ -265,12 +257,8 @@ function resolveLanding(state, sqId, events, rng) {
       p.jailed = true;
       p.jailTurns = 0;
       log(events, `${p.name} 被关押在 ${sq.id} 号监狱（${jailLimitFor(sq.id)} 回合）`, 'jail');
-      if (jailLimitFor(sq.id) === 1) {
-        endTurn(state, events, rng);
-      } else {
-        state.phase = 'jail_turn';
-        state.pending = { playerId: p.id, kind: 'jail' };
-      }
+      // 入狱当回合直接结束回合（11/21/32 号一致），关押回合自下一回合起算
+      endTurn(state, events, rng);
       return;
     case 'rest':
     case 'start':
@@ -1317,10 +1305,6 @@ function stockTrade(state, p, orders, events) {
       log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 单城最多 2 股`, 'stock');
       continue;
     }
-    if (city.price >= 15000 && o.shares > 1) {
-      log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 地价较高，单次最多买 1 股`, 'stock');
-      continue;
-    }
     if (city.ownerId === p.id && sharesOf(state, p.id, o.cityId) + o.shares > 4) {
       log(events, `${p.name} 跳过无效买入：${cityLabel(state, o.cityId)} 城市所有者最多持有 4 股（20%）`, 'stock');
       continue;
@@ -1331,7 +1315,6 @@ function stockTrade(state, p, orders, events) {
     log(events, `${p.name} 股票交易未生效：买入最多 3 城、合计 6 股`, 'stock');
     return;
   }
-  const buys = validBuys;
   const validSells = orders.filter((x) => x.side !== 'buy').filter((x) => !state.cities[x.cityId].mortgaged);
   for (const o of orders.filter((x) => x.side !== 'buy')) {
     if (state.cities[o.cityId].mortgaged) log(events, `${p.name} 跳过无效卖出：${cityLabel(state, o.cityId)} 抵押期间股票冻结`, 'stock');
@@ -1390,7 +1373,6 @@ function stockTransfer(state, p, action, events) {
       }
       for (const item of pend.items) {
         const st = state.stocks[item.cityId];
-        const from = playerById(state, pend.fromId);
         const held = st.holders[pend.fromId] || 0;
         const take = Math.min(item.shares, held, 1);
         if (take > 0) {

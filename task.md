@@ -382,3 +382,135 @@ T31 → T36 → T37
 T32 → T36
 T33、T34、T35 可与 T31/T32 并行 → T36 → T37
 ```
+## T38: eslint 配置与存量修复
+**文件：** `eslint.config.js`（新建）、`package.json`
+**依赖：** 无
+**步骤：**
+1. `npm install -D eslint`（更新 package.json 与 package-lock.json）
+2. 创建 eslint.config.js（flat config）：eslint:recommended；server.js/src/scripts/test/e2e 用 node globals，public/client.js 用 browser globals
+3. package.json 新增 `"lint": "eslint server.js src scripts public/client.js test e2e"`
+4. 运行 lint，修复报告问题（未使用变量等）直至通过
+**验证：** `npm run lint` 退出码 0
+
+## T39: 前端端到端测试
+**文件：** `e2e/flow.test.js`（新建）、`package.json`
+**依赖：** 无
+**步骤：**
+1. `npm install -D playwright`
+2. 创建 e2e/flow.test.js：spawn 本地 server（随机端口）→ 双页面创建房间/加入 → 开始对局 → 掷骰（断言事件出现）→ 解散 → 结算弹窗 → 点击回放（断言时间线渲染）
+3. 浏览器通道：CI 环境用 chromium（默认），本机用 msedge channel
+4. package.json：`"test"` 改为 `node --test --test-force-exit test/`；新增 `"test:e2e": "node --test --test-force-exit e2e/"`
+**验证：** `npm run test:e2e` 本机通过（Edge）
+
+## T40: CI 工作流
+**文件：** `.github/workflows/ci.yml`（新建）
+**依赖：** 无（推送后生效）
+**步骤：**
+1. 创建 ci.yml：触发 push/pull_request；job runs-on ubuntu-latest
+2. steps：checkout → setup-node 20（cache npm）→ npm ci → npm run lint → npm test → npx playwright install --with-deps chromium → npm run test:e2e
+**验证：** YAML 语法正确；推送后 GitHub Actions 运行（验收时确认状态）
+
+## T41: 规则平衡模拟器
+**文件：** `scripts/simulate-balance.js`（新建）
+**依赖：** 无
+**步骤：**
+1. 参数解析：--games（默认 20）、--seed、--players（2–4，默认 4）
+2. decideAction(state) 按 phase 分发：waiting_roll 掷骰；buy/buy_airport 现金足够且未达上限则购买；build_decide 现金足够则建 1 级；auction_bid 现金足够出最低加价、已是最高价者则 end；direct_sale_ask 现金足够则买；frozen/jail 能付则付；flight 不飞；self_rescue 有可抵押城市则抵押一座否则 rescue_done；buy_fundraise 取消
+3. 主循环：createRng(seed 或随机) → createGameState → resetDeck → 循环 logic.apply，MAX_TURNS 保险丝
+4. 统计：累积每局 events 用 computeStats 提取城市成交/租金；胜场/回合/破产轮次/平均资产读 state 与事件
+5. 输出平衡性报告（与 analyze-games.js 风格一致）
+**验证：** `node scripts/simulate-balance.js --games 5 --seed 42` 运行并输出全部报告字段
+
+## T42: 移动端棋盘整体缩放
+**文件：** `public/style.css`
+**依赖：** 无
+**步骤：**
+1. 720px 断点：#board 由固定 width:1200px/height:300px 改为 width:100% + aspect-ratio:12/11 + height:auto；#pieces 同步 width/height 100%
+2. #boardWrap 高度自适应，移除/兜底横向滚动
+3. 375px 下格子字号微调（num/nm 保持可读）
+**验证：** playwright 375px 测量 board 宽度≈容器宽度、全部 42 格可见、scrollWidth<=clientWidth
+
+## T43: 全量验证
+**文件：** 无（运行验证）
+**依赖：** T38、T39、T41、T42
+**步骤：**
+1. `npm run lint` 通过
+2. `npm test`（test/）全部通过
+3. `npm run test:e2e` 通过
+4. `node scripts/simulate-balance.js --games 5 --seed 42` 输出报告
+5. 浏览器 375px 棋盘缩放测量通过
+**验证：** 以上全部通过
+
+## T44: README 同步
+**文件：** `README.md`
+**依赖：** T38–T43
+**步骤：**
+1. 新增 lint/test:e2e 命令说明
+2. 新增平衡模拟器用法
+3. 移动端节补充「竖屏棋盘整体缩放全图可见」
+**验证：** 文档包含新说明
+
+
+## T45: 股票转让修复与界面调整
+**文件：** `public/client.js`、`public/index.html`
+**依赖：** 无
+**步骤：**
+1. index.html：从 stockModal 移除 transferBox 静态节点（转让面板与「发起转让」按钮）
+2. client.js：转让列表遍历玩家持有股票（meP.stocks 中 n>0 的城市），行显示「国家·城市（持有 n 股）」，不再依赖拥有城市
+3. client.js：「我的资产」弹窗（openAssetOverview）新增「股票转让」入口按钮；点击后仅在 phase==='stock' 且自己回合时渲染转让表单（目标选择/股票/现金/发起），否则提示「仅经过起点时可转让」
+4. client.js：股票市场弹窗底部仅保留「确认交易」「放弃交易」两个按钮（移除「关闭」，「不交易，继续」改名「放弃交易」）
+**验证：** 双浏览器实测：持有股票（无对应城市）可发起转让、对方确认后股票与现金到账；股票界面仅两个按钮
+
+## T46: 移动端操作栏动态留白
+**文件：** `public/client.js`、`public/style.css`
+**依赖：** 无
+**步骤：**
+1. client.js：新增 fitActionBarPadding()，页面 load 与 resize 时设 body.style.paddingBottom = actionBar.offsetHeight + 12px
+2. style.css：720px 断点 body padding-bottom 由 84px 改为 150px（兜底最小值，防脚本生效前遮挡）
+**验证：** playwright 375px 测量滚动到底时事件记录底部与操作栏顶部不重叠
+
+## T47: 高价城股票单次限购改为 2 股
+**文件：** `src/gameLogic.js`、`public/client.js`、`test/stock.test.js`
+**依赖：** 无
+**步骤：**
+1. gameLogic.js：删除 `if (city.price >= 15000 && o.shares > 1)` 的跳过逻辑（高价城单次限购）
+2. client.js：删除买入上限中高价城 1 股限制（cap 保持单城 2 股）与提交校验；更新股票提示文本与规则速查文本（去掉「地价≥15000 单次 1 股」）
+3. test/stock.test.js：更新用例——纽约（地价≥15000）单次买入 2 股成功，现金与持仓断言同步
+4. spec.md 已同步（规则 9 / AC21）
+**验证：** `npm test` 通过（含更新用例）；浏览器股票界面单城可一次 +2 股
+
+## T48: 21 号监狱入狱当回合修复
+**文件：** `src/gameLogic.js`、`test/gameLogic.test.js`
+**依赖：** 无
+**步骤：**
+1. gameLogic.js：landing 的 jail 分支——21 号监狱（jailLimitFor=3）入狱当回合不再进入 jail_turn，统一 endTurn（与 11/32 号一致）
+2. 新增单元测试：玩家从 20 号掷 1 落到 21 号监狱 → jailed=true、phase 不进入 jail_turn、回合推进到下一玩家
+3. 回归：既有监狱测试（直接构造 jail_turn 场景）不受影响
+**验证：** `npm test` 全部通过（含新用例）
+
+## T49: 资产总览抵押时机说明
+**文件：** `public/client.js`
+**依赖：** 无
+**步骤：**
+1. openAssetOverview（资产总览弹窗）新增说明行：「抵押时机：轮到你行动时可随时抵押（竞拍、交易确认期间除外）；每名玩家最多同时抵押 2 座城市；赎回需先落到该城市，本界面不提供赎回。」
+2. ledgerCityRow 抵押按钮 title 文案统一为「轮到你行动时可抵押（竞拍/交易确认期间除外）；抵押金 = 总价值 × 50%」
+**验证：** 浏览器打开资产总览可见抵押时机说明；按钮提示文案正确
+
+## T50: 银行/资产总览抵押按钮修复
+**文件：** `public/client.js`
+**依赖：** 无
+**步骤：**
+1. openBank：全部「贷款」文案改为「抵押」（标题行「可抵押额度」、区域标签「抵押（自有未抵押城市，上限 2 座）」、按钮「抵押」、行内「可抵押 X」、空态「没有可抵押的城市」）
+2. openBank 抵押按钮 onclick：socket.emit mortgage 后调用 closeModal()（关闭弹窗，结果由事件记录/toast 反馈）
+3. ledgerCityRow 抵押按钮 onclick 同步加 closeModal()（资产总览/中心台账场景）
+**验证：** 浏览器打开银行交易界面显示「抵押」；轮到自己时点击抵押，弹窗关闭且事件记录出现抵押事件
+## 工程化与平衡模拟执行顺序（2026-08-14）
+
+```
+T38 → T43 → T44
+T39 → T43
+T41 → T43
+T42 → T43
+T40 可与 T38–T42 并行（推送后触发）→ 随提交验证
+T45–T50 可与 T38–T44 并行 → T43 全量验证一并纳入
+```
