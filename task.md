@@ -308,3 +308,77 @@ T23 → T24
 T25 → T26 → T27 → T30
 T28、T29 可与 T25–T27 并行 → T30
 ```
+## T31: server.js finalizeGame 统一落盘
+**文件：** `server.js`
+**依赖：** 无
+**步骤：**
+1. 新增常量 `RECORDS_DIR = path.join(__dirname, 'records')`
+2. `finalizeGame` 生成 record 并广播后，调用 `persistRecord(room.gameRecord, RECORDS_DIR)`
+3. `sweepRooms` 移除内部 `persistRecord` 调用（落盘已统一到 finalizeGame，清理只负责删房间）
+**验证：** `node --check server.js` 通过；集成测试断言解散后 records/ 生成文件
+
+## T32: analyze-games.js 四类统计
+**文件：** `scripts/analyze-games.js`
+**依赖：** 无
+**步骤：**
+1. 破产轮次：遍历 events，「轮到」开头的 log 计数轮次，遇「破产出局/认输」事件记录当时轮次
+2. 城市租金收入：解析 rent 事件「支付 … 租金 Y」，按城市累计次数与金额
+3. 机会卡分布：chance 事件按卡名计数
+4. 各玩家胜率：胜场数 / 参与对局数（按 name）
+5. 输出并入现有汇总段，风格一致
+**验证：** 构造样例记录运行 `node scripts/analyze-games.js`，输出含四类统计
+
+## T33: 前端对局回放
+**文件：** `public/client.js`
+**依赖：** 无
+**步骤：**
+1. `renderGameOver` 增加「回放对局」按钮（lastRecord 存在时，所有玩家可见）
+2. 新增 `renderReplay()`：复用 #modal 渲染事件时间线（显示 当前条/总数、事件文本、当前条高亮）
+3. 新增上一条/下一条/自动播放（间隔 1.2 秒）/关闭 逻辑（replayIndex、replayTimer）
+4. 关闭回放恢复结算弹窗
+**验证：** 浏览器双开一局到结算，点击回放可翻页与自动播放；`node --check` 通过
+
+## T34: PWA 资源与注册
+**文件：** `public/manifest.webmanifest`（新建）、`public/sw.js`（新建）、`public/icon.svg`（新建）、`public/index.html`
+**依赖：** 无
+**步骤：**
+1. 创建 icon.svg：深炭棕底 #1A1410 + 哑光古金 #B89B68 元素
+2. 创建 manifest.webmanifest：名称「环球大亨」、display standalone、主题色/背景色取老钱风配色、图标引用 icon.svg
+3. 创建 sw.js：install 缓存核心资源（index.html/style.css/client.js/map-bg.png/manifest/icon），fetch 缓存优先+网络回退，activate 清理旧缓存
+4. index.html 加 manifest/icon/theme-color 链接，并在页面加载时注册 service worker
+**验证：** devtools Application 面板 manifest 有效、SW 激活；勾选 Offline 刷新页面仍可加载
+
+## T35: style.css 移动端适配
+**文件：** `public/style.css`
+**依赖：** 无
+**步骤：**
+1. 审查现有 @media 断点（1320/1080/720），补充 375px 适配
+2. 棋盘缩放/滚动、操作按钮触控尺寸（min-height 约 44px）、台账与侧栏堆叠不遮挡
+**验证：** devtools 375px 与 720px 宽度下检查无遮挡、按钮可触控
+
+## T36: 测试与样例验证
+**文件：** `test/record.test.js`、`test/room-sweep.test.js`、`scripts/analyze-games.js`
+**依赖：** T31、T32
+**步骤：**
+1. record.test.js 集成测试断言解散后项目 records/ 生成对应文件（测试后清理该文件）
+2. room-sweep.test.js 适配（sweepRooms 不再落盘，断言改为检查 records/ 已有文件或跳过落盘断言）
+3. 用样例记录验证 T32 四类统计输出
+4. 运行全量 `npm test`
+**验证：** `npm test` 全部通过（74 + 新增）
+
+## T37: README 同步
+**文件：** `README.md`
+**依赖：** T31–T36
+**步骤：**
+1. 对局数据记录节补充「对局结束自动落盘 records/」
+2. 新增对局回放说明
+3. 新增 PWA 与移动端说明（可安装、离线壳、风格沿用 PC）
+**验证：** 文档包含新功能说明
+
+## 数据驱动与移动端执行顺序（2026-08-14）
+
+```
+T31 → T36 → T37
+T32 → T36
+T33、T34、T35 可与 T31/T32 并行 → T36 → T37
+```

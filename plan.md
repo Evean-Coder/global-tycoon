@@ -272,3 +272,65 @@ test/room-sweep.test.js   新建：清扫与异常兜底测试
 spec.md       已更新（规则16 + F18-20 + N7-9 + AC27-29）
 checklist.md  验收阶段更新
 ```
+## 数据驱动与移动端优化（2026-08-14）
+
+对应 spec 详细规则 17–19、F21–F25、N10–N13、AC30–AC35。
+
+### 架构概览
+- 对局数据：所有结束路径（正常结束/解散/闲置超时）在 finalizeGame 生成记录后统一自动落盘到项目 records/，与房主下载、分析脚本共用同一文件源；分析脚本按事件流解析新增指标。
+- 对局回放：复用结算时已广播到客户端的对局记录（events），前端实现只读事件时间线，不新增 Socket 接口、不改记录格式。
+- PWA 与移动端：新增 manifest/service worker/图标，静态资源缓存实现离线壳；移动端仅做响应式与触控适配，视觉完全沿用 PC 老钱风。
+
+### 核心数据结构与接口
+- RECORDS_DIR：默认 path.join(__dirname, 'records')，finalizeGame 落盘目录（与 sweepRooms 默认一致）。
+- finalizeGame(room, endReason)：生成 record 并广播后，追加 persistRecord(room.gameRecord, RECORDS_DIR)；sweepRooms 移除重复落盘（保持清理动作）。
+- analyze-games.js 新增解析辅助：turnOfBankrupt(events)、rentIncomeByCity(events)、chanceHits(events)、winRateByPlayer(records)。
+- 前端回放状态：replayIndex（当前条）、replayTimer（自动播放句柄）；renderReplay() 渲染事件时间线（序号+文本，手动上一条/下一条/自动播放/关闭）。
+
+### 模块设计
+- server.js（修改）：finalizeGame 统一落盘；sweepRooms 去掉 persistRecord 调用。
+- scripts/analyze-games.js（修改）：汇总新增破产轮次分布（按「轮到 X」事件推进轮次，遇到破产/认输事件记录当前轮）、城市租金收入合计（解析 rent 事件金额）、机会卡命中分布（按卡名计数）、各玩家胜率（胜场/参与局数）。
+- public/client.js（修改）：renderGameOver 增加「回放对局」按钮（所有玩家可见，lastRecord 存在时）；新增回放弹窗渲染与翻页/自动播放逻辑；页面加载时注册 service worker。
+- public/index.html（修改）：新增 manifest 链接、theme-color、icon 链接与 service worker 注册代码。
+- public/style.css（修改）：375px/720px 断点下棋盘缩放、按钮触控尺寸（min-height 约 44px）、台账与侧栏布局堆叠不遮挡。
+- public/manifest.webmanifest（新建）：应用名「环球大亨」，display standalone，主题色/背景色取老钱风深炭棕 #1A1410、古金 #B89B68，图标引用 icon.svg。
+- public/sw.js（新建）：缓存核心静态资源（index.html/style.css/client.js/map-bg.png/manifest/icon），缓存优先+网络回退，activate 清理旧版本缓存。
+- public/icon.svg（新建）：老钱风 SVG 图标（深炭棕底 + 哑光古金「环」形/大亨字样，192/512 通用）。
+
+### 数据流
+- 结束路径：finalizeGame → buildGameRecord → emit gameRecord → persistRecord(records/)。
+- 回放：结算弹窗点「回放对局」→ renderReplay(lastRecord.events) → 手动/自动翻页 → 关闭返回结算。
+- 离线：首次访问注册 sw → 缓存静态资源 → 断网后再次打开由缓存提供页面并提示网络异常。
+- 移动端：媒体查询按 375px/720px 调整棋盘与面板布局，视觉 token 不变。
+
+### 技术决策
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 落盘时机 | finalizeGame 统一落盘，sweep 不重复 | 所有结束路径单一出口，幂等 |
+| 落盘目录 | 项目 records/ | 与下载/分析脚本共用，零配置 |
+| 回放实现 | 前端基于 lastRecord 事件时间线 | 无新接口、无快照、轻量 |
+| 回放可见性 | 所有玩家可见 | 数据已广播，成本为零 |
+| PWA 图标 | 先做 SVG 老钱风图标 | 无需图像生成依赖；后续素材轮换 PNG |
+| SW 策略 | 缓存优先+网络回退 | 加载快、离线可用 |
+| 移动端 | 沿用 PC 视觉，仅响应式适配 | 用户要求风格一致（N13） |
+
+### spec 覆盖对照
+- F21 → finalizeGame 落盘（AC30）
+- F22 → analyze-games.js 新增四类统计（AC31）
+- F23 → client.js 回放时间线（AC32）
+- F24 → manifest + sw.js + icon.svg（AC33）
+- F25 → style.css 移动端适配（AC34）
+- N10 → 不改记录 schema；N11 → 回放只读；N12/N13 → 移动端基准与风格一致（AC35）
+
+### 文件组织
+```
+server.js                    修改：finalizeGame 落盘
+scripts/analyze-games.js     修改：四类新统计
+public/client.js             修改：回放 + SW 注册
+public/index.html            修改：manifest/icon/SW 链接
+public/style.css             修改：375px/720px 适配
+public/manifest.webmanifest  新建
+public/sw.js                 新建
+public/icon.svg              新建
+test/                        修改：落盘断言与统计样例
+```

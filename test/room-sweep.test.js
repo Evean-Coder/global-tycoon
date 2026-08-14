@@ -74,19 +74,20 @@ test('集成：全员离线清扫删除房间并落盘 idle_timeout 记录', asy
   const joined = await new Promise((r) => b.emit('joinRoom', { roomCode: code, name: '乙' }, r));
   assert.strictEqual(joined.ok, true);
   await new Promise((r) => a.emit('startGame', {}, r));
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tycoon-sweep-'));
-  tmpDirs.push(tmpDir);
+  const startedAt = rooms.get(code).state.startedAt;
   a.close();
   b.close();
   await waitFor(() => rooms.has(code) && rooms.get(code).idleSince != null);
-  sweepRooms(Date.now(), { lobbyIdleMs: 0, gameIdleMs: 0, recordsDir: tmpDir });
+  sweepRooms(Date.now(), { lobbyIdleMs: 0, gameIdleMs: 0 });
   assert.strictEqual(rooms.has(code), false);
-  const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.json'));
-  assert.strictEqual(files.length, 1);
-  const rec = JSON.parse(fs.readFileSync(path.join(tmpDir, files[0]), 'utf8'));
+  const recDir = path.join(__dirname, '..', 'records');
+  const recFile = path.join(recDir, code + '-' + startedAt + '.json');
+  assert.strictEqual(fs.existsSync(recFile), true);
+  const rec = JSON.parse(fs.readFileSync(recFile, 'utf8'));
   assert.strictEqual(rec.endReason, 'idle_timeout');
   assert.strictEqual(rec.roomCode, code);
   assert.strictEqual(rec.players.length, 2);
+  try { fs.unlinkSync(recFile); } catch (e) {}
 });
 
 test('集成：对局中有人在线时清扫不删除房间', async () => {

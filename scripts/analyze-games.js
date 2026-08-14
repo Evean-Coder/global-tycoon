@@ -77,17 +77,50 @@ for (const r of records) {
 }
 
 const avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 10) / 10 : 0;
-// 胜场与平均资产统计
+// 胜场、平均资产与行为统计
 const wins = {};
+const participations = {};
 const champAssets = [];
 const allAssets = [];
+const bankruptRounds = [];
+const rentByCity = {};
+const chanceByCard = {};
+function cityKeyOf(text) {
+  for (const name of Object.keys(CITIES)) {
+    if (text.indexOf(CITIES[name].country + '·' + name) !== -1) return name;
+  }
+  return null;
+}
 for (const r of records) {
   const winP = r.players && r.players.find((p) => p.id === r.winner);
   if (winP) {
     wins[winP.name] = (wins[winP.name] || 0) + 1;
     champAssets.push(winP.totalAssets || 0);
   }
-  for (const p of r.players || []) allAssets.push(p.totalAssets || 0);
+  for (const p of r.players || []) {
+    allAssets.push(p.totalAssets || 0);
+    participations[p.name] = (participations[p.name] || 0) + 1;
+  }
+  let round = 0;
+  for (const e of r.events || []) {
+    const text = e.text || '';
+    if (text.indexOf('轮到 ') === 0) {
+      round++;
+    } else if (e.type === 'bankrupt' && (text.indexOf('破产出局') !== -1 || text.indexOf('认输') !== -1)) {
+      bankruptRounds.push(Math.ceil(round / Math.max(1, (r.players || []).length)));
+    } else if (e.type === 'rent') {
+      const ck = cityKeyOf(text);
+      const m = text.match(/租金\s*(\d+)/);
+      if (ck) {
+        rentByCity[ck] = rentByCity[ck] || { count: 0, total: 0 };
+        rentByCity[ck].count++;
+        if (m) rentByCity[ck].total += parseInt(m[1], 10);
+      }
+    } else if (e.type === 'chance') {
+      const cm = text.match(/「(.+?)」/);
+      if (cm) chanceByCard[cm[1]] = (chanceByCard[cm[1]] || 0) + 1;
+    }
+  }
 }
 const money = (n) => '￥' + Math.round(n).toLocaleString('zh-CN');
 
@@ -115,6 +148,40 @@ if (sortedWins.length) {
 }
 if (champAssets.length) console.log('冠军平均最终总资产：' + money(avg(champAssets)));
 if (allAssets.length) console.log('全员平均最终总资产：' + money(avg(allAssets)));
+console.log('');
+if (bankruptRounds.length) {
+  const byRound = {};
+  for (const r of bankruptRounds) byRound[r] = (byRound[r] || 0) + 1;
+  console.log('破产轮次分布：');
+  for (const k of Object.keys(byRound).sort((a, b) => a - b)) console.log('  第 ' + k + ' 轮 x ' + byRound[k] + ' 次');
+} else {
+  console.log('破产轮次分布：（无破产记录）');
+}
+const rentTop = Object.keys(rentByCity).sort((a, b) => rentByCity[b].total - rentByCity[a].total);
+console.log('城市租金收入 Top：');
+if (rentTop.length) {
+  rentTop.slice(0, 5).forEach((cid) => {
+    const c = CITIES[cid] || {};
+    console.log('  ' + (c.country || '') + '·' + cid + ' x ' + rentByCity[cid].count + ' 次，合计 ' + money(rentByCity[cid].total));
+  });
+} else {
+  console.log('  （暂无租金记录）');
+}
+const chanceTop = Object.keys(chanceByCard).sort((a, b) => chanceByCard[b] - chanceByCard[a]);
+console.log('机会卡命中 Top：');
+if (chanceTop.length) {
+  chanceTop.slice(0, 5).forEach((name) => console.log('  ' + name + ' x ' + chanceByCard[name]));
+} else {
+  console.log('  （暂无机会卡记录）');
+}
+const winNames = Object.keys(wins).sort((a, b) => wins[b] - wins[a]);
+console.log('各玩家胜率：');
+for (const name of winNames) {
+  const p = participations[name] || 0;
+  const pct = p ? Math.round((wins[name] / p) * 100) + '%' : '-';
+  console.log('  ' + name + ' ' + wins[name] + '/' + p + '（' + pct + '）');
+}
+console.log('');
 console.log('');
 const topCities = Object.keys(merged.cityPurchases).sort((a, b) => merged.cityPurchases[b] - merged.cityPurchases[a]);
 console.log('城市交易热度（购买/拍得/直接购入次数，共 ' + topCities.length + ' 座有交易）：');

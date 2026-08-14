@@ -1,5 +1,10 @@
 'use strict';
 
+// PWA：注册 service worker（缓存静态资源，离线可用）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
 const socket = io();
 let me = { name: '', roomCode: null };
 let game = null;
@@ -802,6 +807,7 @@ function renderGameOver() {
     + '<div class="rule"></div>'
     + '<table class="rank"><tr><th>名次</th><th>玩家</th><th>总资产</th></tr>' + rows + '</table>'
     + '<div class="btnrow"><button class="secondary" onclick="closeModal()">返回房间页</button>'
+    + (lastRecord ? '<button class="secondary" onclick="openReplay()">回放对局</button>' : '')
     + (roomHostId === socket.id ? '<button class="secondary" onclick="downloadRecord()">下载对局数据</button>' : '')
     + (roomHostId === socket.id ? '<button class="primary" onclick="socket.emit(\'startGame\')">重新开始新对局</button>' : '') + '</div>';
   openModal('对局结束');
@@ -820,6 +826,58 @@ function downloadRecord() {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+let replayIndex = 0;
+let replayTimer = null;
+
+function openReplay() {
+  if (!lastRecord || !lastRecord.events || !lastRecord.events.length) { toast('暂无回放数据'); return; }
+  replayIndex = 0;
+  replayTimer = null;
+  renderReplay();
+}
+function renderReplay() {
+  const evs = lastRecord.events;
+  const e = evs[replayIndex];
+  const t = (e && e.text ? e.text : '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  $('modalBody').innerHTML = '<div class="replay-head">事件回放 · 第 ' + (replayIndex + 1) + ' / ' + evs.length + ' 条</div>'
+    + '<div class="replay-box">' + t + '</div>'
+    + '<div class="btnrow"><button class="secondary" onclick="replayPrev()">上一条</button>'
+    + '<button class="secondary" onclick="replayPlay()">' + (replayTimer ? '暂停' : '自动播放') + '</button>'
+    + '<button class="secondary" onclick="replayNext()">下一条</button>'
+    + '<button class="primary" onclick="replayClose()">关闭</button></div>';
+  openModal('回放对局');
+}
+function replayPrev() {
+  if (replayIndex > 0) { replayIndex--; renderReplay(); }
+}
+function replayNext() {
+  if (replayIndex < lastRecord.events.length - 1) { replayIndex++; renderReplay(); }
+}
+function replayPlay() {
+  if (replayTimer) {
+    clearInterval(replayTimer);
+    replayTimer = null;
+    renderReplay();
+    return;
+  }
+  replayTimer = setInterval(() => {
+    if (replayIndex >= lastRecord.events.length - 1) {
+      clearInterval(replayTimer);
+      replayTimer = null;
+      renderReplay();
+      return;
+    }
+    replayIndex++;
+    renderReplay();
+  }, 1200);
+}
+function replayClose() {
+  if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+  closeModal();
+  renderGameOver();
+}
+
 
 // ---------- 规则速查 ----------
 function buildRules() {

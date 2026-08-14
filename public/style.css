@@ -414,10 +414,29 @@ ul.players .slot{color:var(--off);font-size:13px}
   #log{max-height:110px}
   #actionBar{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;border-radius:0;flex-wrap:wrap;gap:8px;padding:10px 12px}
   #actionBar .spacer{display:none}
-  #actionBar button{min-width:104px;height:42px}
+  #actionBar button{min-width:104px;min-height:44px}
 }
 
 .stock-item .srow{display:flex;align-items:center;gap:6px;margin-top:3px}
 .stock-item .srow .lbl{color:var(--muted);font-size:11px;min-width:16px}
 .stock-item .srow button{height:26px;min-width:30px;padding:0;font-size:14px}
 .stock-item .srow span{font-family:var(--mono);min-width:20px;text-align:center;color:var(--title)}
+
+
+/* ---------- 对局回放 ---------- */
+.replay-head{font-family:var(--serif);color:var(--gold-deep);letter-spacing:2px;font-size:14px;text-align:center;padding:2px 0 8px}
+.replay-box{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:14px 16px;max-height:46vh;overflow-y:auto;color:var(--text);line-height:1.7;font-size:14px}
+
+/* ---------- 375px 手机 ---------- */
+@media (max-width:375px){
+  .view{padding:8px}
+  .card{padding:18px 14px}
+  header{padding:8px 10px}
+  .brand h1{font-size:16px}
+  #actionBar{gap:6px;padding:8px 10px}
+  #actionBar button{min-width:96px}
+  #modalBody{padding:14px 14px 4px}
+  #modalBody .row button,.btnrow button{min-width:0;padding:0 10px}
+  #side .panel{padding:10px}
+  #log{max-height:96px}
+}

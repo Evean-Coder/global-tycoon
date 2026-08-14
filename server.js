@@ -17,6 +17,7 @@ const HOST_TRANSFER_MS = 10 * 60 * 1000;
 const LOBBY_IDLE_MS = 10 * 60 * 1000; // 大厅（未开局）空房保留时限
 const GAME_IDLE_MS = 30 * 60 * 1000; // 对局中/已结束房间无人保留时限
 const SWEEP_INTERVAL_MS = 60 * 1000; // 房间清扫周期
+const RECORDS_DIR = path.join(__dirname, 'records'); // 对局记录落盘目录
 
 const app = express();
 app.get('/healthz', (req, res) => res.send('ok')); // Render 健康检查
@@ -91,13 +92,10 @@ function persistRecord(record, dir) {
 }
 
 function sweepRooms(now = Date.now(), cfg) {
-  const c = Object.assign({ recordsDir: path.join(__dirname, 'records') }, cfg);
+  const c = Object.assign({ lobbyIdleMs: LOBBY_IDLE_MS, gameIdleMs: GAME_IDLE_MS }, cfg);
   for (const [code, room] of rooms) {
     if (!shouldSweepRoom(room, now, c)) continue;
-    if (room.state) {
-      if (!room.gameRecord) finalizeGame(room, 'idle_timeout');
-      if (room.gameRecord) persistRecord(room.gameRecord, c.recordsDir);
-    }
+    if (room.state && !room.gameRecord) finalizeGame(room, 'idle_timeout');
     clearTimer(room, 'action');
     if (room.hostTimer) {
       clearTimeout(room.hostTimer);
@@ -142,6 +140,7 @@ function finalizeGame(room, endReason) {
     const sock = io.sockets.sockets.get(rp.socketId);
     if (sock) sock.emit('gameRecord', room.gameRecord);
   }
+  persistRecord(room.gameRecord, RECORDS_DIR);
   return room.gameRecord;
 }
 

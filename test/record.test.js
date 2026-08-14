@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const { io: Client } = require('socket.io-client');
 const { createGameState, resetDeck } = require('../src/state');
 const { createRng } = require('../src/random');
@@ -86,7 +88,7 @@ test('集成：中途解散房间时广播完整对局记录', async () => {
   });
   spawnedChildren.push(child);
   await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('服务器启动超时')), 8000);
+    const t = setTimeout(() => reject(new Error('服务器启动超时')), 15000);
     child.stdout.on('data', (d) => {
       if (String(d).includes('运行于')) { clearTimeout(t); resolve(); }
     });
@@ -112,6 +114,10 @@ test('集成：中途解散房间时广播完整对局记录', async () => {
   assert.strictEqual(rec.players.length, 2);
   assert.ok(rec.events.length >= 1);
   assert.strictEqual(rec.stats.eventCount, rec.events.length);
+  const recDir = path.join(__dirname, '..', 'records');
+  const recFile = path.join(recDir, rec.roomCode + '-' + rec.startedAt + '.json');
+  assert.strictEqual(fs.existsSync(recFile), true);
+  try { fs.unlinkSync(recFile); } catch (e) {}
 }, { timeout: 25000 });
 
 test.afterEach(() => {
