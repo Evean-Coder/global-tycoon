@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
@@ -13,12 +14,19 @@ const PORT = process.env.PORT || 3000;
 const MAIN_TIMEOUT = 90 * 1000;
 const SUB_TIMEOUT = 60 * 1000;
 const HOST_TRANSFER_MS = 10 * 60 * 1000;
+const LOBBY_IDLE_MS = 10 * 60 * 1000; // 大厅（未开局）空房保留时限
+const GAME_IDLE_MS = 30 * 60 * 1000; // 对局中/已结束房间无人保留时限
+const SWEEP_INTERVAL_MS = 60 * 1000; // 房间清扫周期
 
 const app = express();
 app.get('/healthz', (req, res) => res.send('ok')); // Render 健康检查
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const io = new Server(server);
+
+// 异常兜底：记录日志后保持进程存活，避免单个错误拖垮所有房间
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
+process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 
 const rooms = new Map(); // roomCode -> room
 
@@ -54,11 +62,49 @@ function makeRoom(hostSocket, name) {
     lastEventBase: 0,
     events: [], // 完整对局事件流水（用于生成对局数据记录）
     gameRecord: null, // 已生成的对局记录（防重复）
+    idleSince: null, // 最后一名在线玩家断开的时间；null 表示有人在线
   };
   issueToken(hostSocket, room.players[0]);
   rooms.set(code, room);
   hostSocket.join(`room:${code}`);
   return room;
+}
+
+function touchRoom(room) {
+  room.idleSince = null; // 有玩家加入/重连时取消闲置计时
+}
+
+function shouldSweepRoom(room, now, cfg) {
+  if (room.idleSince == null) return false; // 有人在线的房间永不清理
+  const c = Object.assign({ lobbyIdleMs: LOBBY_IDLE_MS, gameIdleMs: GAME_IDLE_MS }, cfg);
+  const idle = now - room.idleSince;
+  return room.state ? idle >= c.gameIdleMs : idle >= c.lobbyIdleMs;
+}
+
+function persistRecord(record, dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, record.roomCode + '-' + record.startedAt + '.json'), JSON.stringify(record, null, 2));
+  } catch (err) {
+    console.error('[record] 落盘失败:', err);
+  }
+}
+
+function sweepRooms(now = Date.now(), cfg) {
+  const c = Object.assign({ recordsDir: path.join(__dirname, 'records') }, cfg);
+  for (const [code, room] of rooms) {
+    if (!shouldSweepRoom(room, now, c)) continue;
+    if (room.state) {
+      if (!room.gameRecord) finalizeGame(room, 'idle_timeout');
+      if (room.gameRecord) persistRecord(room.gameRecord, c.recordsDir);
+    }
+    clearTimer(room, 'action');
+    if (room.hostTimer) {
+      clearTimeout(room.hostTimer);
+      room.hostTimer = null;
+    }
+    rooms.delete(code);
+  }
 }
 
 function roomStatePayload(room) {
@@ -170,7 +216,14 @@ function runAction(room, socket, action) {
     return;
   }
   const rng = createRng();
-  const res = logic.apply(room.state, action, rng);
+  let res;
+  try {
+    res = logic.apply(room.state, action, rng);
+  } catch (err) {
+    console.error('[action] 规则引擎异常:', err);
+    if (socket) socket.emit('error', { message: '操作异常，请重试' });
+    return;
+  }
   if (!res.rejected) {
     room.lastEvents = res.events || [];
     room.lastEventBase = room.eventSeq;
@@ -199,15 +252,21 @@ function syncSocketIds(room) {
   }
 }
 
+function safeHandler(fn) {
+  return (...args) => {
+    try { fn(...args); } catch (err) { console.error('[socket] 回调异常:', err); }
+  };
+}
+
 io.on('connection', (socket) => {
-  socket.on('createRoom', (data, cb) => {
+  socket.on('createRoom', safeHandler((data, cb) => {
     const name = String(data && data.name || '玩家').slice(0, 12);
     const room = makeRoom(socket, name);
     cb && cb({ ok: true, roomCode: room.code });
     emitRoom(room);
-  });
+  }));
 
-  socket.on('joinRoom', (data, cb) => {
+  socket.on('joinRoom', safeHandler((data, cb) => {
     const code = String(data && data.roomCode || '').trim();
     const room = rooms.get(code);
     if (!room) return cb && cb({ ok: false, error: '房间不存在' });
@@ -218,12 +277,13 @@ io.on('connection', (socket) => {
     const p = { socketId: socket.id, id: `p${room.players.length}`, name, seat: room.players.length, connected: true, token: null };
     issueToken(socket, p);
     room.players.push(p);
+    touchRoom(room);
     socket.join(`room:${code}`);
     cb && cb({ ok: true, roomCode: code });
     emitRoom(room);
-  });
+  }));
 
-  socket.on('reconnect', (data, cb) => {
+  socket.on('reconnect', safeHandler((data, cb) => {
     const code = String(data && data.roomCode || '').trim();
     const room = rooms.get(code);
     if (!room) return cb && cb({ ok: false, error: '房间不存在' });
@@ -236,6 +296,7 @@ io.on('connection', (socket) => {
     rp.socketId = socket.id;
     rp.connected = true;
     rp.token = null;
+    touchRoom(room);
     socket.join(`room:${code}`);
     if (oldSock) oldSock.disconnect(true);
     issueToken(socket, rp);
@@ -248,9 +309,9 @@ io.on('connection', (socket) => {
     cb && cb({ ok: true, roomCode: code });
     emitRoom(room);
     emitGame(room);
-  });
+  }));
 
-  socket.on('startGame', (data, cb) => {
+  socket.on('startGame', safeHandler((data, cb) => {
     const room = [...rooms.values()].find((r) => r.players.some((p) => p.socketId === socket.id));
     if (!room) return cb && cb({ ok: false, error: '不在房间内' });
     if (room.hostId !== socket.id) return cb && cb({ ok: false, error: '只有房主能开始' });
@@ -265,20 +326,22 @@ io.on('connection', (socket) => {
     cb && cb({ ok: true });
     emitRoom(room);
     emitGame(room);
-  });
+  }));
 
-  socket.on('action', (action, cb) => {
+  socket.on('action', safeHandler((action, cb) => {
     const room = [...rooms.values()].find((r) => r.players.some((p) => p.socketId === socket.id));
     if (!room) return cb && cb({ ok: false, error: '不在房间内' });
     runAction(room, socket, action);
     cb && cb({ ok: true });
-  });
+  }));
 
   socket.on('disconnect', () => {
     for (const room of rooms.values()) {
       const rp = room.players.find((p) => p.socketId === socket.id);
       if (!rp) continue;
       rp.connected = false;
+      // 全部玩家离线时开始记录闲置时间，供房间清扫器清理
+      if (room.players.every((p) => !p.connected)) room.idleSince = room.idleSince || Date.now();
       // 房主掉线：大厅或对局已结束时立即转移；对局进行中按 spec 等 10 分钟
       if (room.hostId === socket.id && room.players.filter((p) => p.connected).length > 0) {
         clearTimeout(room.hostTimer);
@@ -306,7 +369,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disbandRoom', (data, cb) => {
+  socket.on('disbandRoom', safeHandler((data, cb) => {
     const room = [...rooms.values()].find((r) => r.players.some((p) => p.socketId === socket.id));
     if (!room) return cb && cb({ ok: false });
     if (room.hostId !== socket.id && room.state) return cb && cb({ ok: false, error: '仅房主可解散' });
@@ -321,7 +384,7 @@ io.on('connection', (socket) => {
       emitGame(room);
     }
     cb && cb({ ok: true });
-  });
+  }));
 });
 
 function totalAssets(state, player) {
@@ -336,6 +399,7 @@ if (require.main === module) {
   server.listen(PORT, '0.0.0.0', () => {
     console.log('环球大亨运行于 http://localhost:' + PORT);
   });
+  setInterval(() => sweepRooms(), SWEEP_INTERVAL_MS);
 }
 
-module.exports = { app, server, io, rooms, totalAssets };
+module.exports = { app, server, io, rooms, totalAssets, shouldSweepRoom, sweepRooms };

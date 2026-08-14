@@ -77,6 +77,19 @@ for (const r of records) {
 }
 
 const avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 10) / 10 : 0;
+// 胜场与平均资产统计
+const wins = {};
+const champAssets = [];
+const allAssets = [];
+for (const r of records) {
+  const winP = r.players && r.players.find((p) => p.id === r.winner);
+  if (winP) {
+    wins[winP.name] = (wins[winP.name] || 0) + 1;
+    champAssets.push(winP.totalAssets || 0);
+  }
+  for (const p of r.players || []) allAssets.push(p.totalAssets || 0);
+}
+const money = (n) => '￥' + Math.round(n).toLocaleString('zh-CN');
 
 console.log('========== 对局数据汇总 ==========');
 console.log('记录文件：' + records.length + ' 份，总事件：' + merged.eventCount + ' 条');
@@ -94,6 +107,14 @@ console.log('关键动作合计：');
 console.log('  破产: ' + merged.bankruptcies + ' | 认输: ' + merged.surrenders);
 console.log('  机会卡抽取: ' + merged.chanceDraws + ' | 入狱: ' + merged.jailEntries);
 console.log('  拍卖: ' + merged.auctions + ' | 租金支付: ' + merged.rentsPaid + ' | 抵押相关事件: ' + merged.mortgageEvents);
+console.log('');
+const sortedWins = Object.keys(wins).sort((a, b) => wins[b] - wins[a]);
+if (sortedWins.length) {
+  console.log('玩家胜场：');
+  for (const name of sortedWins) console.log('  ' + name + ': ' + wins[name] + ' 局');
+}
+if (champAssets.length) console.log('冠军平均最终总资产：' + money(avg(champAssets)));
+if (allAssets.length) console.log('全员平均最终总资产：' + money(avg(allAssets)));
 console.log('');
 const topCities = Object.keys(merged.cityPurchases).sort((a, b) => merged.cityPurchases[b] - merged.cityPurchases[a]);
 console.log('城市交易热度（购买/拍得/直接购入次数，共 ' + topCities.length + ' 座有交易）：');

@@ -232,6 +232,67 @@
 2. `npm test` 全绿；README 写启动与局域网访问说明。
 **验证：** `node --test` 全部通过。
 
+## T25: server.js 房间闲置计时与清扫
+**文件：** `server.js`
+**依赖：** 无
+**步骤：**
+1. 顶部新增 `require('fs')`；新增常量 `LOBBY_IDLE_MS=10*60*1000`、`GAME_IDLE_MS=30*60*1000`、`SWEEP_INTERVAL_MS=60*1000`
+2. `makeRoom` 的 room 对象新增 `idleSince: null`
+3. 新增函数：`touchRoom(room)`、`shouldSweepRoom(room, now, cfg)`、`sweepRooms(now, cfg)`、`persistRecord(record, dir)`
+4. `disconnect` 回调中：置 `rp.connected=false` 后，若 `room.players` 全员离线则 `room.idleSince = room.idleSince || Date.now()`
+5. `joinRoom` / `reconnect` 成功路径调用 `touchRoom(room)`
+6. `sweepRooms` 清理逻辑：对局中且无 gameRecord 先 `finalizeGame(room,'idle_timeout')`；有 gameRecord 则 `persistRecord` 到 `cfg.recordsDir`（默认 `path.join(__dirname,'records')`）；`clearTimer('action')`、清 hostTimer、`rooms.delete`
+7. `require.main` 分支在 `server.listen` 后启动 `setInterval(() => sweepRooms(), SWEEP_INTERVAL_MS)`
+8. `module.exports` 增加 `shouldSweepRoom`、`sweepRooms`
+**验证：** `node --check server.js` 通过；行为验证由 T27 覆盖
+
+## T26: server.js 异常兜底
+**文件：** `server.js`
+**依赖：** 无（可与 T25 一并提交）
+**步骤：**
+1. `runAction` 中 `logic.apply(...)` 包 try/catch：异常时 `console.error('[action] 规则引擎异常:', err)`、`socket.emit('error',{message:'操作异常，请重试'})`、return
+2. 新增 `safeHandler(fn)` 包装函数，捕获异常并记录日志
+3. 用 `safeHandler` 包裹 createRoom / joinRoom / reconnect / startGame / action / disbandRoom 六个回调
+4. 模块顶层新增 `process.on('uncaughtException'/'unhandledRejection')` 日志兜底
+**验证：** `node --check server.js` 通过；`npm test` 现有用例不回归
+
+## T27: 新增清扫与异常兜底测试
+**文件：** `test/room-sweep.test.js`（新建）
+**依赖：** T25、T26
+**步骤：**
+1. `shouldSweepRoom` 单元用例：大厅闲置 10 分钟到期清理；对局闲置 30 分钟到期；有人在线（idleSince=null）不清理；未到期不清理（注入短阈值）
+2. 同进程集成：`require('../server')` 后 `server.listen(随机端口)`，用 socket.io-client 创建房间并加入
+3. 场景 A：全部断开 → `sweepRooms(Date.now(), {lobbyIdleMs:0, gameIdleMs:0, recordsDir:tmp})` → rooms 不含该码、tmp 生成记录文件（endReason='idle_timeout'）
+4. 场景 B：一个玩家保持在线 → 相同参数 sweep → 房间保留
+5. afterEach：关闭 sockets/server、清空 rooms、删除临时目录
+**验证：** `node --test test/room-sweep.test.js` 全部通过
+
+## T28: 删除重复背景图
+**文件：** `public/Vintage_antique_world_map_in_s_2026-08-12T12-33-16.png`
+**依赖：** 无
+**步骤：**
+1. 确认该文件与 `public/map-bg.png` MD5 一致且未被引用（`rg map-bg public`）
+2. `git rm public/Vintage_antique_world_map_in_s_2026-08-12T12-33-16.png`
+**验证：** `git status` 显示删除；页面样式仍引用 `map-bg.png`
+
+## T29: 分析脚本汇总增强
+**文件：** `scripts/analyze-games.js`
+**依赖：** 无
+**步骤：**
+1. 汇总段累计各玩家胜场（records 的 winner 匹配 players.id → name）
+2. 累计冠军与全员 `totalAssets`，输出冠军平均最终总资产、全员平均最终总资产
+3. 输出格式与现有汇总风格一致
+**验证：** 运行 `node scripts/analyze-games.js`，输出包含胜场与平均资产两项
+
+## T30: 文档同步与全量回归
+**文件：** `README.md`、`checklist.md`
+**依赖：** T25–T29
+**步骤：**
+1. README 新增房间清理说明（大厅 10 分钟、对局/结束 30 分钟；闲置超时记录自动落盘 records/）
+2. checklist.md 新增「稳定性与架构优化（2026-08-14）」记录节（清理机制、异常兜底、资产清理、分析增强、测试结果）
+3. 运行 `npm test` 全量
+**验证：** `npm test` 全部通过（原 71 + 新增用例）；文档包含清理规则
+
 ## 执行顺序
 
 ```
@@ -240,4 +301,10 @@ T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11 → T
 T15（依赖 T1、T4，可与 T5–T14 并行推进骨架）→ T16（依赖 T5–T14）→ T17
 T18 → T19 → T20 → T21 → T22
 T23 → T24
+```
+## 稳定性优化执行顺序（2026-08-14）
+
+```
+T25 → T26 → T27 → T30
+T28、T29 可与 T25–T27 并行 → T30
 ```

@@ -214,3 +214,61 @@ project/
 - 本地局域网调试：服务端监听 `0.0.0.0`（`server.listen(3000, '0.0.0.0')`）；手机与电脑连同一 WiFi，浏览器打开 `http://电脑局域网IP:3000`（如 192.168.x.x）；必要时在 Windows 防火墙放行 3000 端口。
 - 公网访问：部署到免费托管平台（Render 免费层，备选 Railway）后打开公网域名/URL；开发期也可用内网穿透（如 cpolar、ngrok）临时生成公网链接。
 - 手机无需安装 App，浏览器直接打开即可（响应式界面，spec N1）。
+## 稳定性与架构优化（2026-08-14）
+
+对应 spec 详细规则 16、F18–F20、N7–N9、AC27–AC29。全部改动集中在 server.js 与 scripts/analyze-games.js，不改变 Socket 协议、游戏规则与对局记录 schema。
+
+### 架构概览
+- 房间生命周期：每个房间新增闲置计时（idleSince），最后一名在线玩家断开时开始计时，玩家加入/重连时清零；服务器每 60 秒清扫一次空房，到期删除房间并释放资源。
+- 数据保全：清扫对局中（未结束）的空房时，先补生成「闲置超时」对局记录并写入 records/ 目录，再删除房间；已结束房间同样在删除前把已生成的对局记录落盘，避免玩家未下载时数据丢失。
+- 异常兜底：玩家操作入口与主要 Socket 回调统一捕获异常；进程级 uncaughtException/unhandledRejection 仅记录日志不退出。
+
+### 核心数据结构
+- room.idleSince: number | null —— 最后一名在线玩家断开的时间戳；null 表示房间当前有人在线，不参与清扫。
+- 常量（server.js）：LOBBY_IDLE_MS=10 分钟、GAME_IDLE_MS=30 分钟、SWEEP_INTERVAL_MS=60 秒。
+
+### 接口
+- touchRoom(room): void —— 玩家加入/重连成功时调用，置 idleSince=null。
+- shouldSweepRoom(room, now, cfg): boolean —— 纯函数；无人且闲置达到阈值（大厅取 lobbyIdleMs、有对局取 gameIdleMs）返回 true；cfg 可注入阈值。
+- sweepRooms(now?, cfg?): void —— 遍历 rooms，对到期房间：对局中先 finalizeGame(room,'idle_timeout')；有 gameRecord 则 persistRecord 落盘；清 action/host 定时器后 rooms.delete。
+- persistRecord(record, dir): void —— 写 records/<roomCode>-<startedAt>.json（mkdir recursive，失败仅记日志不阻断清理）。
+- safeHandler(fn): (...args)=>void —— 包装 Socket 事件回调，捕获异常并记录日志。
+- module.exports 新增导出 shouldSweepRoom、sweepRooms（供测试直接调用）。
+
+### 模块设计
+- server.js（修改）：新增 require('fs')；makeRoom 增加 idleSince 字段；disconnect 中全员离线时设置 idleSince；joinRoom/reconnect 调用 touchRoom；runAction 的 logic.apply 包 try/catch（异常时 emit error「操作异常，请重试」并 return）；createRoom/joinRoom/reconnect/startGame/action/disbandRoom 用 safeHandler 包裹；进程级 process.on 兜底；require.main 分支启动 setInterval 清扫。
+- scripts/analyze-games.js（修改）：汇总段新增各玩家胜场、冠军平均最终总资产、全员平均最终总资产。
+- public/Vintage_antique_world_map_in_s_2026-08-12T12-33-16.png（删除）：与 map-bg.png MD5 相同的未引用副本。
+- test/room-sweep.test.js（新建）：覆盖 AC27/AC28。
+
+### 模块交互与数据流
+- 掉线：socket disconnect → rp.connected=false → 全员离线则 room.idleSince=Date.now()。
+- 恢复：joinRoom/reconnect 成功 → touchRoom → idleSince=null。
+- 清扫：setInterval(60s) → sweepRooms() → shouldSweepRoom(room, now) → 到期房间：finalizeGame('idle_timeout')（仅对局中）→ persistRecord → 清定时器 → rooms.delete。
+- 异常：action → runAction → logic.apply 抛错 → catch → console.error + socket.emit('error','操作异常，请重试') → 返回，房间状态不变。
+
+### 技术决策
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 清理时限 | 大厅 10 分钟 / 对局与结束 30 分钟 | 用户确认；重连窗口与清理一致 |
+| 闲置超时补记录 | 生成 endReason='idle_timeout' 并落盘 records/ | 保证无人对局数据不丢；与分析脚本兼容；AC27 可测 |
+| 异常策略 | 捕获并继续 | 用户确认；避免单点异常团灭所有房间 |
+| 清扫周期 | 60 秒 | 及时性与开销平衡，无人房间最多晚 60 秒回收 |
+| 资产处理 | 只删重复图片，不压缩在用图 | 用户确认；零视觉风险 |
+| 分析脚本 | 汇总加胜场与平均资产 | 服务规则平衡迭代；不改 schema |
+
+### spec 覆盖对照
+- F18 → idleSince + shouldSweepRoom + sweepRooms + persistRecord（AC27）
+- F19 → runAction try/catch + safeHandler + process.on 兜底（AC28）
+- F20 → analyze-games.js 汇总输出增强（AC29）
+- N7 → 异常兜底；N8 → 清扫机制；N9 → 删除重复背景图
+
+### 文件组织
+```
+server.js      修改：房间生命周期 + 异常兜底 + 记录落盘
+scripts/analyze-games.js  修改：汇总输出增强
+public/Vintage_antique_world_map_in_s_2026-08-12T12-33-16.png  删除
+test/room-sweep.test.js   新建：清扫与异常兜底测试
+spec.md       已更新（规则16 + F18-20 + N7-9 + AC27-29）
+checklist.md  验收阶段更新
+```
