@@ -4,7 +4,7 @@ const { rollDice, shuffle } = require('./random');
 
 const JAILS = [11, 21, 32];
 const GO = 0;
-const GO_BONUS = 5000;
+const GO_BONUS = 10000;
 const START_CASH = 150000;
 const JAIL_FINE = 15000;
 const FREEZE_FINE = 5000;

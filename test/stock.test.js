@@ -72,7 +72,7 @@ test('股息：所有者过起点时按总价值×10% 派发', () => {
   state.players[0].position = 40;
   const rng = diceRng([6]); // 6 → 40+6=46 → 4（跨过起点）
   logic.apply(state, { type: 'roll_dice' }, rng);
-  assert.strictEqual(state.players[0].cash, 150000 + 5000);
+  assert.strictEqual(state.players[0].cash, 150000 + 10000);
   assert.strictEqual(state.players[1].cash, 150000 + 300); // 3/20 × 2000
 });
 
