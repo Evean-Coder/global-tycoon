@@ -60,8 +60,12 @@ function clearReconnect() { localStorage.removeItem('gt_reconnect'); }
 function updateWaitBanner() {
   const banner = $('waitBanner');
   if (!banner) return;
-  if (disconnectedNames.length && game && game.phase !== 'game_over') {
-    banner.textContent = '⏸ ' + disconnectedNames.join('、') + ' 掉线，对局暂停，等待重连…';
+  const aliveOffline = disconnectedNames.filter((n) => {
+    const gp = game ? game.players.find((p) => p.name === n) : null;
+    return !gp || gp.alive; // 已破产玩家掉线不提示暂停
+  });
+  if (aliveOffline.length && game && game.phase !== 'game_over') {
+    banner.textContent = '⏸ ' + aliveOffline.join('、') + ' 掉线，对局暂停，等待重连…';
     banner.classList.remove('hidden');
   } else banner.classList.add('hidden');
 }

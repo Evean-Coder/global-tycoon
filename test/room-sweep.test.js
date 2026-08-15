@@ -129,3 +129,32 @@ test('集成：规则引擎异常时服务器不退出、房间保留、操作�
   }
   assert.strictEqual(rooms.has(code), true);
 });
+
+test('集成：破产玩家断开不影响对局，存活玩家断开仍暂停', async () => {
+  const url = await listen();
+  const a = Client(url);
+  const b = Client(url);
+  const c = Client(url);
+  sockets.push(a, b, c);
+  await Promise.all([once(a, 'connect'), once(b, 'connect'), once(c, 'connect')]);
+  const code = await new Promise((r) => a.emit('createRoom', { name: '甲' }, (x) => r(x.roomCode)));
+  await new Promise((r) => b.emit('joinRoom', { roomCode: code, name: '乙' }, r));
+  await new Promise((r) => c.emit('joinRoom', { roomCode: code, name: '丙' }, r));
+  await new Promise((r) => a.emit('startGame', {}, r));
+  // 乙破产并断开
+  rooms.get(code).state.players[1].alive = false;
+  b.close();
+  await new Promise((r) => setTimeout(r, 250));
+  // 甲掷骰应正常推进（不被暂停）
+  const gsP = once(a, 'gameState', 5000);
+  await new Promise((r) => a.emit('action', { type: 'roll_dice' }, r));
+  const gs = await gsP;
+  assert.ok(gs.dice >= 1 && gs.dice <= 10, '破产玩家断开后甲应能正常行动');
+  // 存活玩家甲断开 → 丙行动被暂停拒绝
+  a.close();
+  await new Promise((r) => setTimeout(r, 250));
+  const errP = once(c, 'error', 5000);
+  await new Promise((r) => c.emit('action', { type: 'roll_dice' }, r));
+  const err = await errP;
+  assert.ok(err.message.indexOf('掉线') !== -1, '存活玩家断开应对局暂停');
+});

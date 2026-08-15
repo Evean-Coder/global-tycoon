@@ -504,6 +504,15 @@ T33、T34、T35 可与 T31/T32 并行 → T36 → T37
 2. openBank 抵押按钮 onclick：socket.emit mortgage 后调用 closeModal()（关闭弹窗，结果由事件记录/toast 反馈）
 3. ledgerCityRow 抵押按钮 onclick 同步加 closeModal()（资产总览/中心台账场景）
 **验证：** 浏览器打开银行交易界面显示「抵押」；轮到自己时点击抵押，弹窗关闭且事件记录出现抵押事件
+
+## T51: 已破产玩家退出不影响对局
+**文件：** `server.js`、`public/client.js`、`test/integration.test.js`
+**依赖：** 无
+**步骤：**
+1. server.js runAction：掉线暂停检查改为——存在「存活（state.players 中 alive=true）且未连接」的玩家才暂停；破产玩家断开不拒绝行动
+2. client.js updateWaitBanner：从断开名单中过滤已破产玩家（按 game.players alive 判断），仅存活玩家掉线才显示「等待重连」横幅
+3. 新增集成测试：甲/乙开局后令乙破产（alive=false）并断开，甲掷骰正常推进；存活玩家断开时仍暂停
+**验证：** `npm test` 通过（含新用例）；`npm run lint` 通过
 ## 工程化与平衡模拟执行顺序（2026-08-14）
 
 ```

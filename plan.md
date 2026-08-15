@@ -352,7 +352,7 @@ test/                        修改：落盘断言与统计样例
 - .github/workflows/ci.yml（新建）：checkout → setup-node 20（cache npm）→ npm ci → npm run lint → npm test → npx playwright install --with-deps chromium → npm run test:e2e。
 - eslint.config.js（新建）：flat config，eslint:recommended 基础；服务端/脚本用 node globals，public/client.js 用 browser globals，test/e2e 用 node globals；全量检查并修复存量报告项（75 项测试兜底）。
 - e2e/flow.test.js（新建）：流程——创建房间→第二页加入→开始对局→首回合掷骰（断言事件出现）→解散房间→结算弹窗出现→点击回放（断言时间线渲染）。
-- public/style.css（修改，移动端棋盘）：720px 断点下棋盘由固定 1200px 宽改为 width:100% + aspect-ratio:12/11 整体等比缩放至容器宽度，棋子层（#pieces）同步跟随，移除横向滚动依赖（F25/AC34）。\n- public/client.js（修改，股票与移动端）：股票市场界面仅保留「确认交易/放弃交易」两个按钮；玩家间转让面板移至「我的资产」；转让列表改为遍历玩家持有股票（修复无转让标的 bug）；页面加载与窗口变化时动态设置 body 底部内边距 = 操作栏高度 + 12px。\n- public/index.html（修改）：移除 stockModal 内转让面板（transferBox）静态节点。\n- public/style.css（修改）：720px 断点 body padding-bottom 兜底 150px。\n- scripts/simulate-balance.js（新建）：AI 决策按 phase 分发——waiting_roll 掷骰；buy/buy_airport 现金足够且未达上限则购买；build_decide 现金足够则建 1 级；auction_bid 现金足够出最低加价、已是最高价者则结束拍卖；direct_sale_ask 现金足够则购买；frozen/jail 能付则付；flight 不飞；self_rescue 有可抵押城市则抵押一座，否则放弃（rescue_done）；buy_fundraise 取消；每局设 MAX_TURNS 防死循环（如 4 人 2000 回合）。
+- server.js（修改，掉线暂停）：runAction 的掉线暂停检查改为仅统计存活玩家（state.players 中 alive=true 且房间内未连接）；破产玩家断开不拒绝行动。\n- public/client.js（修改，掉线提示）：updateWaitBanner 过滤已破产玩家，只有存活玩家掉线才显示「等待重连」横幅。\n- public/style.css（修改，移动端棋盘）：720px 断点下棋盘由固定 1200px 宽改为 width:100% + aspect-ratio:12/11 整体等比缩放至容器宽度，棋子层（#pieces）同步跟随，移除横向滚动依赖（F25/AC34）。\n- public/client.js（修改，股票与移动端）：股票市场界面仅保留「确认交易/放弃交易」两个按钮；玩家间转让面板移至「我的资产」；转让列表改为遍历玩家持有股票（修复无转让标的 bug）；页面加载与窗口变化时动态设置 body 底部内边距 = 操作栏高度 + 12px。\n- public/index.html（修改）：移除 stockModal 内转让面板（transferBox）静态节点。\n- public/style.css（修改）：720px 断点 body padding-bottom 兜底 150px。\n- scripts/simulate-balance.js（新建）：AI 决策按 phase 分发——waiting_roll 掷骰；buy/buy_airport 现金足够且未达上限则购买；build_decide 现金足够则建 1 级；auction_bid 现金足够出最低加价、已是最高价者则结束拍卖；direct_sale_ask 现金足够则购买；frozen/jail 能付则付；flight 不飞；self_rescue 有可抵押城市则抵押一座，否则放弃（rescue_done）；buy_fundraise 取消；每局设 MAX_TURNS 防死循环（如 4 人 2000 回合）。
 - 模拟统计：累积每局 events，结束时用 src/record.js 的 computeStats 提取城市成交/租金统计；其余（胜场、平均回合、破产轮次、平均资产）直接读 state 与事件。
 
 ### 数据流
@@ -367,13 +367,13 @@ test/                        修改：落盘断言与统计样例
 | lint 策略 | eslint flat config + recommended，全量修复存量 | 一次到位；75 项测试兜底风险 |
 | 模拟 AI 策略 | 简单启发式（买得起就买、能建就建等） | 平衡观察足够，避免复杂策略成本 |
 | 固定种子 | createRng(seed) 原生支持 | 复现成本为零，无需改 random.js |
-| 防死循环 | MAX_TURNS 保险丝 | 异常局面不至于挂死 |\n| 移动端棋盘 | 整体等比缩放至容器宽度（用户确认方案 A） | 42 格全图可见、无需横向滚动 |\n| 股票转让列表 | 遍历玩家持有股票（meP.stocks）而非拥有城市 | 修复当前无法发起转让的 bug |\n| 移动端底部留白 | JS 动态 = 操作栏高度+12px，CSS 兜底 150px | 任意换行高度都不遮挡内容 |
+| 防死循环 | MAX_TURNS 保险丝 | 异常局面不至于挂死 |\n| 移动端棋盘 | 整体等比缩放至容器宽度（用户确认方案 A） | 42 格全图可见、无需横向滚动 |\n| 股票转让列表 | 遍历玩家持有股票（meP.stocks）而非拥有城市 | 修复当前无法发起转让的 bug |\n| 移动端底部留白 | JS 动态 = 操作栏高度+12px，CSS 兜底 150px | 任意换行高度都不遮挡内容 |\n| 掉线暂停范围 | 仅存活玩家掉线触发暂停 | 破产玩家已出局，退出不应拖住对局 |
 
 ### spec 覆盖对照
 - F26 → ci.yml（AC36）
 - F27 → e2e/flow.test.js（AC37）
 - F28 → eslint.config.js + lint 脚本（AC38）
-- F29 → scripts/simulate-balance.js（AC39）\n- F25 → public/style.css 棋盘整体缩放（AC34）
+- F29 → scripts/simulate-balance.js（AC39）\n- F25 → public/style.css 棋盘整体缩放（AC34）\n- F11 → server.js 存活玩家掉线检查 + client.js 横幅过滤（AC11）
 - N14 → CI 固定 Node 20 + npm ci（lockfile）；N15 → --games/--seed 参数
 
 ### 文件组织

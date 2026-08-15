@@ -190,8 +190,12 @@ function startTimer(room) {
 
 function runAction(room, socket, action) {
   if (!room.state || room.state.phase === 'game_over') return;
-  // 掉线暂停：有玩家离线时仅允许认输，其余行动拒绝
-  if (room.players.some((p) => !p.connected)) {
+  // 掉线暂停：仅存活玩家离线时暂停（破产玩家已出局，退出不影响对局），暂停时仅允许认输
+  const disconnectedAlive = room.state.players.some((gp) => {
+    const rp = room.players.find((x) => x.id === gp.id);
+    return gp.alive && rp && !rp.connected;
+  });
+  if (disconnectedAlive) {
     if (action && action.type !== 'surrender') {
       if (socket) socket.emit('error', { message: '有玩家掉线，对局暂停，等待重连' });
       return;
