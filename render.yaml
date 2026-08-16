@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: global-tycoon
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.4
