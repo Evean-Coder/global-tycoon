@@ -165,6 +165,18 @@ function defaultAction(room, phase) {
     case 'auction_bid': return { type: 'auction_respond', decision: 'pass' };
     case 'direct_sale_ask': return { type: 'direct_sale_respond', decision: 'pass' };
     case 'self_rescue': return { type: 'rescue_done' };
+    case 'augment_choice': {
+      const pend = room.state && room.state.pending;
+      const first = pend && pend.choices && pend.choices[0];
+      return first ? { type: 'augment_choose', augId: first.id } : null;
+    }
+    case 'augment_dice_choice': return { type: 'augment_dice_choice', method: 'sum' };
+    case 'augment_buyout': return { type: 'augment_buyout', decision: 'pass' };
+    case 'augment_swap': {
+      const pend = room.state && room.state.pending;
+      const pick = pend && (pend.step === 'own' ? pend.ownChoices && pend.ownChoices[0] : pend.targetChoices && pend.targetChoices[0]);
+      return pick ? { type: 'augment_swap_pick', cityId: pick.cityId } : null;
+    }
     default: return null;
   }
 }
@@ -205,8 +217,8 @@ function runAction(room, socket, action) {
   const cur = room.state.players[room.state.turnIndex];
   let allowedId = cur.id;
   const pend = room.state.pending;
-  if (pend && ['auction_bid', 'direct_sale_ask', 'trade_confirm'].includes(room.state.phase)) {
-    allowedId = pend.awaiting || pend.targetId || cur.id;
+  if (pend && ['auction_bid', 'direct_sale_ask', 'trade_confirm', 'augment_choice', 'augment_dice_choice', 'augment_swap', 'augment_buyout'].includes(room.state.phase)) {
+    allowedId = pend.awaiting || pend.playerId || pend.targetId || cur.id;
   }
   const allowedRp = playerByGameId(room, allowedId);
   const allowedSocketId = allowedRp ? allowedRp.socketId : cur.socketId;

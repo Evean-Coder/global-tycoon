@@ -103,13 +103,23 @@ test('子流程顺序：拍卖轮到非当前回合玩家时可正常出价', as
     if (state.phase === 'stock') return { type: 'stock_done' };
     if (state.phase === 'flight') return { type: 'flight', target: null };
     if (state.phase === 'self_rescue') return { type: 'rescue_done' };
+    if (state.phase === 'augment_choice') return { type: 'augment_choose', augId: state.pending.choices[0].id };
+    if (state.phase === 'augment_dice_choice') return { type: 'augment_dice_choice', method: 'sum' };
+    if (state.phase === 'augment_buyout') return { type: 'augment_buyout', decision: 'pass' };
+    if (state.phase === 'augment_swap') {
+      const p = state.pending;
+      const pick = p.step === 'own' ? p.ownChoices && p.ownChoices[0] : p.targetChoices && p.targetChoices[0];
+      return pick ? { type: 'augment_swap_pick', cityId: pick.cityId } : null;
+    }
     return null;
   };
   let guard = 0;
   while (!(lastA && lastA.phase === 'buy') && guard++ < 120) {
     const state = lastA;
-    const cur = state.players[state.turnIndex];
-    const sock = cur.name === '甲' ? a : b;
+    const actorId = ['augment_choice', 'augment_dice_choice', 'augment_swap', 'augment_buyout'].includes(state.phase) && state.pending
+      ? state.pending.playerId
+      : state.players[state.turnIndex].id;
+    const sock = actorId === 'p0' ? a : b;
     const act = auto(state);
     if (!act) break;
     const preJson = JSON.stringify(state);

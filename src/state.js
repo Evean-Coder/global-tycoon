@@ -23,6 +23,10 @@ function createPlayer(name, seat, id) {
     stocks: {}, // cityId -> shares
     lapBuys: 0, // 一圈（起点到起点）内购买城市数
     lapDone: false, // 本圈是否已经过起点
+    lapCount: 0, // 已完成的圈数（海克斯圈数触发判定）
+    augments: [], // 已获取的海克斯实例 {id,name,desc,tier,acquiredAtLap}
+    augmentCooldowns: {}, // 海克斯技能冷却（augId -> 剩余回合）
+    augmentUsed: {}, // 一次性海克斯已使用标记（augId -> true）
     connected: true,
     reconnectToken: null,
   };

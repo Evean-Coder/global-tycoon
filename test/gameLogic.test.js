@@ -432,6 +432,35 @@ test('破产：押质城市归银行不进拍卖', () => {
   assert.strictEqual(state.cities['开罗'].mortgageInterest, 0);
 });
 
+test('拍卖出售后卖家破产，已售城市仍归买家（不收回银行）', () => {
+  const state = twoPlayerState();
+  state.phase = 'waiting_roll';
+  state.pending = null;
+  state.turnIndex = 0;
+  state.players[0].position = 0;
+  state.cities['开罗'].ownerId = 'p0';
+  state.players[0].cities.push('开罗');
+
+  // 卖家在起点发起拍卖出售，唯一参与者出价即成交
+  const rng = diceRng([1]);
+  logic.apply(state, { type: 'sell_city', cityId: '开罗', mode: 'auction' }, rng);
+  assert.strictEqual(state.phase, 'auction_bid');
+  logic.apply(state, { type: 'auction_respond', decision: 'bid', amount: 4500 }, rng);
+  assert.strictEqual(state.cities['开罗'].ownerId, 'p1');
+  assert.ok(state.players[1].cities.includes('开罗'));
+  assert.ok(!state.players[0].cities.includes('开罗'));
+
+  // 卖家随后破产：已售城市应保持归属买家，不能收回银行
+  state.turnIndex = 0;
+  state.phase = 'self_rescue';
+  state.pending = { playerId: 'p0', kind: 'self_rescue', due: 50000, reason: '租金', resume: false };
+  state.players[0].cash = -50000;
+  logic.apply(state, { type: 'rescue_done' }, fakeRng([0.5]));
+  assert.strictEqual(state.status, 'over');
+  assert.strictEqual(state.winner, 'p1');
+  assert.strictEqual(state.cities['开罗'].ownerId, 'p1');
+});
+
 test('超阶段自救动作被拒绝', () => {
   const state = twoPlayerState();
   state.cities['开罗'].ownerId = 'p0';

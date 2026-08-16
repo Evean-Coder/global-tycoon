@@ -285,6 +285,7 @@ function renderSide() {
   if (cur.jailed) state += ' <span class="badge host">入狱</span>';
   if (cur.frozen) state += ' <span class="badge host">冰冻</span>';
   const stocks = Object.entries(cur.stocks || {}).filter(([, n]) => n > 0);
+  const augs = (cur.augments || []);
   panel.innerHTML = '<h3>我的信息</h3>'
     + '<div class="pinfo"><b>' + cur.name + '</b>' + (isHost ? ' <span class="badge host">房主</span>' : '') + state + '</div>'
     + '<div class="assets">'
@@ -292,6 +293,7 @@ function renderSide() {
     + '<div class="asset-row"><span>当前现金</span><b class="total">' + fmt(cur.cash) + '</b></div>'
     + '<div class="asset-row"><span>城市 ' + cur.cities.length + '（抵押 ' + cur.cities.filter((id) => game.cities[id].mortgaged).length + '）</span><b>' + (cur.airports || []).length + ' 机场</b></div>'
     + '<div class="asset-row"><span>持股</span><b>' + (stocks.map(([c, n]) => (game.cities[c].country ? game.cities[c].country + '·' : '') + c + '×' + n).join('、') || '无') + '</b></div>'
+    + (augs.length ? '<div class="asset-row"><span>海克斯</span><b>' + augs.map((a) => a.name).join('、') + '</b></div>' : '')
     + '</div>';
   const others = game.players.filter((p) => p.id !== me.gameId);
   const othersEl = $('sideOthers');
@@ -636,6 +638,85 @@ function renderPending() {
         openModal('自救');
       }
       break;
+    case 'augment_choice': {
+      const pend = game.pending;
+      const mine = pend && pend.playerId === me.gameId;
+      if (mine) {
+        const tierLabel = pend.tier === 'silver' ? '白银' : pend.tier === 'gold' ? '黄金' : '棱彩';
+        let html = '<div class="card-tag">AUGMENT · ' + tierLabel + '</div><p>第 ' + pend.lapCount + ' 圈完成，选择 1 个海克斯强化：</p><div class="aug-list">';
+        (pend.choices || []).forEach((c) => {
+          html += '<div class="aug-card aug-' + c.tier + '" onclick="emitAct({type:\'augment_choose\',augId:\'' + c.id + '\'})"><div class="aug-name">' + c.name + '</div><div class="aug-desc">' + c.desc + '</div></div>';
+        });
+        html += '</div>';
+        if (!pend.rerollUsed) html += '<div class="btnrow"><button class="secondary" onclick="emitAct({type:\'augment_reroll\'})">刷新选项（1 次）</button></div>';
+        body.innerHTML = html;
+        openModal('海克斯强化');
+      } else {
+        const fp = playerById(pend && pend.playerId);
+        closeModal();
+        toast('等待 ' + (fp ? fp.name : '对方') + ' 选择海克斯…');
+      }
+      break;
+    }
+    case 'augment_dice_choice': {
+      const pend = game.pending;
+      const mine = pend && pend.playerId === me.gameId;
+      if (mine) {
+        const a = pend.diceA;
+        const b = pend.diceB;
+        body.innerHTML = '<div class="card-tag">SPACE WARP</div><p>两个骰子：' + a + ' 与 ' + b + '，选择位移算法：</p>'
+          + '<div class="btnrow"><button class="primary" onclick="emitAct({type:\'augment_dice_choice\',method:\'sum\'})">相加 ' + (a + b) + '</button>'
+          + '<button class="secondary" onclick="emitAct({type:\'augment_dice_choice\',method:\'diff\'})">相减 |' + a + '-' + b + '|=' + Math.abs(a - b) + '</button>'
+          + '<button class="secondary" onclick="emitAct({type:\'augment_dice_choice\',method:\'mul\'})">相乘 ' + (a * b) + '</button></div>';
+        openModal('空间折跃');
+      } else {
+        const fp = playerById(pend && pend.playerId);
+        closeModal();
+        toast('等待 ' + (fp ? fp.name : '对方') + ' 选择位移算法…');
+      }
+      break;
+    }
+    case 'augment_swap': {
+      const pend = game.pending;
+      const mine = pend && pend.playerId === me.gameId;
+      if (mine) {
+        if (pend.step === 'own') {
+          let html = '<div class="card-tag">LAND SWAP</div><p>选择己方 1 处地产：</p>';
+          (pend.ownChoices || []).forEach((o) => {
+            const c = game.cities[o.cityId];
+            html += '<button class="secondary block" onclick="emitAct({type:\'augment_swap_pick\',cityId:\'' + o.cityId + '\'})">' + (c.country ? c.country + '·' : '') + o.cityId + '（' + o.level + ' 级）</button>';
+          });
+          body.innerHTML = html;
+        } else {
+          let html = '<div class="card-tag">LAND SWAP</div><p>选择与己方同级的目标地产：</p>';
+          (pend.targetChoices || []).forEach((t) => {
+            const c = game.cities[t.cityId];
+            html += '<button class="secondary block" onclick="emitAct({type:\'augment_swap_pick\',cityId:\'' + t.cityId + '\'})">' + (c.country ? c.country + '·' : '') + t.cityId + '（' + t.level + ' 级）</button>';
+          });
+          body.innerHTML = html;
+        }
+        openModal('地籍调换');
+      } else {
+        closeModal();
+        toast('等待对方地籍调换…');
+      }
+      break;
+    }
+    case 'augment_buyout': {
+      const pend = game.pending;
+      const mine = pend && pend.playerId === me.gameId;
+      if (mine) {
+        const c = game.cities[pend.cityId];
+        const owner = playerById(pend.ownerId);
+        body.innerHTML = '<div class="card-tag">HOSTILE TAKEOVER</div><p>可支付 ' + fmt(pend.price) + ' 强制买断 ' + (c.country ? c.country + '·' : '') + pend.cityId + '（现属 ' + (owner ? owner.name : '') + '）。</p>'
+          + '<div class="btnrow"><button class="primary" onclick="emitAct({type:\'augment_buyout\',decision:\'buy\'})">支付买断</button><button class="secondary" onclick="emitAct({type:\'augment_buyout\',decision:\'pass\'})">放弃（正常付租）</button></div>';
+        openModal('恶意收购');
+      } else {
+        closeModal();
+        toast('等待对方决定是否买断…');
+      }
+      break;
+    }
   }
 }
 

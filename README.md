@@ -48,6 +48,17 @@ npm run test:e2e  # 浏览器端到端测试（本机用 Edge，CI 用 Chromium�
 ## 规则平衡模拟
 
 运行 `node scripts/simulate-balance.js [--games N] [--seed S] [--players 2-4]`，用当前规则引擎驱动多局 AI 对局（简单启发式 AI），输出平衡性报告：各玩家胜场、平均回合数、平均最终资产、破产轮次分布、城市成交与租金收入 Top、事件类型分布。默认 4 人 20 局；固定种子可复现。
+
+## 海克斯强化（Augments）
+
+以单人完成圈数（Lap Count）触发品质锁定的三选一强化：第 1 圈从白银池、第 6 圈从黄金池、第 10 圈从棱彩池各随机 3 张互不重复的选项，其余圈数不触发。每个选择窗口可刷新一次（仍从当前品质池重抽）。多人/AI 异步选择，不阻塞其他玩家。
+
+- 白银池：开工补贴、双速引擎、天使轮融资、地契盲盒、低谷保单。
+- 黄金池：违章扩建、强拆通告、连锁商圈、地籍调换、过路税改。
+- 棱彩池：恶意收购、资本清算、全域通胀、末日对冲、空间折跃。
+
+核心实现见 `src/augments.js`（卡池、`getAugmentChoices` 抽取、事件 Hook 与效果），规则引擎挂载点为投掷/购买成本/路过/停留/跑圈/破产前置六类 Hook；前端三选一与刷新、地籍调换、恶意收购、空间折跃交互见 `public/client.js`。测试见 `test/augments.test.js`。
+
 ## 项目结构
 
 ```
@@ -56,6 +67,7 @@ src/board.js       棋盘、城市、机场、机会卡数据
 src/gameLogic.js   规则引擎（纯函数）
 src/state.js       对局状态容器
 src/random.js      随机源（可注入）
+src/augments.js    海克斯卡池、抽取算法与效果 Hook
 src/record.js      对局记录生成与统计
 scripts/analyze-games.js  对局记录批量分析工具
 public/            前端（原生 HTML/CSS/JS）

@@ -1,6 +1,7 @@
 'use strict';
 
 const { rollDice, shuffle } = require('./random');
+const AUG = require('./augments');
 
 const JAILS = [11, 21, 32];
 const GO = 0;
@@ -141,6 +142,13 @@ function advanceTurn(state, events, _rng) {
   do {
     state.turnIndex = (state.turnIndex + 1) % state.players.length;
   } while (!state.players[state.turnIndex].alive);
+  // 海克斯冷却：轮到该玩家时递减 1 回合
+  const nextP = currentPlayer(state);
+  if (nextP.augmentCooldowns) {
+    for (const key of Object.keys(nextP.augmentCooldowns)) {
+      nextP.augmentCooldowns[key] = Math.max(0, (nextP.augmentCooldowns[key] || 0) - 1);
+    }
+  }
   // 一轮（所有存活玩家各行动一次）完成时：清算抵押利息一次
   if (state.turnIndex === 0) {
     for (const pp of state.players) {
@@ -204,12 +212,15 @@ function advanceTurn(state, events, _rng) {
 
 // ---------- 起点结算 ----------
 
-function settleGo(state, player, events) {
-  player.cash += GO_BONUS;
+function settleGo(state, player, events, rng) {
+  player.lapCount = (player.lapCount || 0) + 1;
+  let bonus = GO_BONUS;
+  AUG.runHook(state, player, 'OnGoBonus', { events, bonus });
+  player.cash += bonus;
   player.lapBuys = 0; // 回到起点重置本圈购买次数
   player.lapDone = true; // 本圈已过起点
   maybeCompleteLapCycle(state, events);
-  log(events, `${player.name} 跨过/停在起点，获得 ${GO_BONUS}`);
+  log(events, `${player.name} 跨过/停在起点，获得 ${bonus}`);
   // 名下城市股息
   for (const cityId of player.cities) {
     const c = state.cities[cityId];
@@ -228,12 +239,171 @@ function settleGo(state, player, events) {
     const remainder = total - distributed;
     if (remainder > 0) log(events, `${cityLabel(state, cityId)} 股息零头/无主部分 ${remainder} 归银行`, 'dividend');
   }
+  triggerAugmentChoice(state, player, events, rng);
 }
 
 function openStockWindow(state, player, events, after) {
   state.phase = 'stock';
   state.pending = { playerId: player.id, kind: 'go_stock', after };
   log(events, `${player.name} 可在起点进行一次股票交易`, 'stock');
+}
+
+// ---------- 海克斯：圈数触发与选择 ----------
+
+function tierName(tier) {
+  return tier === 'silver' ? '白银' : tier === 'gold' ? '黄金' : '棱彩';
+}
+
+function triggerAugmentChoice(state, player, events, rng) {
+  const tier = AUG.tierForLap(player.lapCount);
+  if (!tier) return;
+  const ownedIds = (player.augments || []).map((a) => a.id);
+  const choices = AUG.getAugmentChoices(player.lapCount, rng, ownedIds);
+  if (!choices.length) return;
+  const after = player.position === GO ? 'end' : 'land';
+  state.phase = 'augment_choice';
+  state.pending = { type: 'augment_choice', playerId: player.id, lapCount: player.lapCount, tier, choices, rerollUsed: false, after };
+  log(events, `${player.name} 完成第 ${player.lapCount} 圈，触发【${tierName(tier)}】海克斯三选一`, 'augment');
+}
+
+function augmentChoose(state, action, events, rng) {
+  const pend = state.pending;
+  if (state.phase !== 'augment_choice') return;
+  const choice = (pend.choices || []).find((c) => c.id === action.augId);
+  if (!choice) return;
+  const p = playerById(state, pend.playerId);
+  p.augments.push({ id: choice.id, name: choice.name, desc: choice.desc, tier: choice.tier, acquiredAtLap: p.lapCount });
+  log(events, `${p.name} 选择海克斯【${choice.name}】`, 'augment');
+  AUG.onAcquire(state, p, choice.id, { events, rng });
+  state.pending = null;
+  if (choice.id === 'AUG_GOLD_04') {
+    startAugmentSwap(state, p, events, rng, pend.after);
+    return;
+  }
+  // 恢复圈结算后的流程：跨起点继续落地结算，停在起点进入股票窗口
+  openStockWindow(state, p, events, pend.after === 'end' ? 'end' : 'land');
+}
+
+function augmentReroll(state, action, events, rng) {
+  const pend = state.pending;
+  if (state.phase !== 'augment_choice') return;
+  if (pend.rerollUsed) return;
+  const p = playerById(state, pend.playerId);
+  const exclude = (p.augments || []).map((a) => a.id);
+  const choices = AUG.getAugmentChoices(pend.lapCount, rng, exclude);
+  if (!choices.length) return;
+  pend.choices = choices;
+  pend.rerollUsed = true;
+  log(events, `${p.name} 刷新海克斯选项（当前品质：${tierName(pend.tier)}）`, 'augment');
+}
+
+// ---------- 海克斯：地籍调换（两步选地） ----------
+
+function startAugmentSwap(state, p, events, _rng, after) {
+  const ownChoices = (p.cities || []).map((id) => ({ cityId: id, level: state.cities[id].houseLevel || 0 }));
+  if (!ownChoices.length) {
+    openStockWindow(state, p, events, after === 'end' ? 'end' : 'land');
+    return;
+  }
+  state.phase = 'augment_swap';
+  state.pending = { type: 'augment_swap', playerId: p.id, step: 'own', ownChoices, after };
+  log(events, `${p.name} 地籍调换：先选择己方 1 处地产`, 'augment');
+}
+
+function augmentSwapPick(state, action, events, _rng) {
+  const pend = state.pending;
+  if (state.phase !== 'augment_swap') return;
+  const p = playerById(state, pend.playerId);
+  if (pend.step === 'own') {
+    const sel = pend.ownChoices.find((o) => o.cityId === action.cityId);
+    if (!sel) return;
+    pend.ownCityId = sel.cityId;
+    pend.ownLevel = sel.level;
+    pend.step = 'target';
+    pend.targetChoices = Object.keys(state.cities)
+      .filter((id) => id !== sel.cityId && state.cities[id].ownerId && state.cities[id].ownerId !== p.id && (state.cities[id].houseLevel || 0) === sel.level)
+      .map((id) => ({ cityId: id, ownerId: state.cities[id].ownerId, level: state.cities[id].houseLevel || 0 }));
+    if (!pend.targetChoices.length) {
+      log(events, `${p.name} 地籍调换：全场无同等级可调换地产，效果失效`, 'augment');
+      state.pending = null;
+      openStockWindow(state, p, events, pend.after === 'end' ? 'end' : 'land');
+      return;
+    }
+    log(events, `${p.name} 选择己方 ${cityLabel(state, sel.cityId)}，请选择同等级目标地产`, 'augment');
+    return;
+  }
+  const tgt = (pend.targetChoices || []).find((t) => t.cityId === action.cityId);
+  if (!tgt) return;
+  const sel = state.cities[pend.ownCityId];
+  const dst = state.cities[tgt.cityId];
+  const srcOwner = playerById(state, dst.ownerId);
+  // 互换归属
+  sel.ownerId = srcOwner.id;
+  dst.ownerId = p.id;
+  if (srcOwner.cities) srcOwner.cities = srcOwner.cities.filter((id) => id !== tgt.cityId).concat(pend.ownCityId);
+  p.cities = p.cities.filter((id) => id !== pend.ownCityId).concat(tgt.cityId);
+  sel.buildReady = false;
+  dst.buildReady = false;
+  log(events, `${p.name} 地籍调换：${cityLabel(state, pend.ownCityId)} 与 ${cityLabel(state, tgt.cityId)} 互换归属`, 'augment');
+  state.pending = null;
+  openStockWindow(state, p, events, pend.after === 'end' ? 'end' : 'land');
+}
+
+// ---------- 海克斯：恶意收购 ----------
+
+function startAugmentBuyout(state, p, sq, events, _rng) {
+  const city = state.cities[sq.cityId];
+  const owner = playerById(state, city.ownerId);
+  if (!owner) return;
+  const price = Math.round(city.price * 1.5);
+  state.phase = 'augment_buyout';
+  state.pending = { type: 'augment_buyout', playerId: p.id, cityId: city.id, ownerId: owner.id, price };
+  log(events, `${p.name} 停在 ${owner.name} 最高等级地产 ${cityLabel(state, city.id)}，可支付 ${price} 恶意收购`, 'augment');
+}
+
+function augmentBuyout(state, action, events, rng) {
+  const pend = state.pending;
+  if (state.phase !== 'augment_buyout') return;
+  const p = playerById(state, pend.playerId);
+  const city = state.cities[pend.cityId];
+  const owner = playerById(state, pend.ownerId);
+  if (action.decision === 'buy') {
+    if (!city || city.ownerId !== owner.id || p.cash < pend.price) {
+      endTurn(state, events, rng);
+      return;
+    }
+    p.cash -= pend.price;
+    owner.cash += pend.price;
+    city.ownerId = p.id;
+    if (owner.cities) owner.cities = owner.cities.filter((id) => id !== pend.cityId);
+    p.cities.push(pend.cityId);
+    city.buildReady = false;
+    log(events, `${p.name} 以 ${pend.price} 恶意收购 ${cityLabel(state, pend.cityId)}`, 'augment');
+    state.pending = null;
+    endTurn(state, events, rng);
+    return;
+  }
+  // 放弃买断：回到普通收租流程
+  state.pending = null;
+  settleCityRent(state, p, state.board.find((s) => s.cityId === pend.cityId), events, rng, { skipBuyout: true });
+}
+
+// ---------- 海克斯：空间折跃 ----------
+
+function augmentDiceChoice(state, action, events, rng) {
+  const pend = state.pending;
+  if (state.phase !== 'augment_dice_choice') return;
+  if (!['sum', 'diff', 'mul'].includes(action.method)) return;
+  const p = playerById(state, pend.playerId);
+  const a = pend.diceA;
+  const b = pend.diceB;
+  let steps;
+  if (action.method === 'sum') steps = a + b;
+  else if (action.method === 'diff') steps = Math.abs(a - b);
+  else steps = a * b;
+  log(events, `${p.name} 空间折跃：${a} 与 ${b} 选择【${action.method === 'sum' ? '相加' : action.method === 'diff' ? '相减绝对值' : '相乘'}】→ ${steps} 步`, 'augment');
+  state.pending = null;
+  applyMovement(state, p, steps, events, rng);
 }
 
 // ---------- 落点结算 ----------
@@ -288,8 +458,14 @@ function resolveCity(state, player, sq, events, rng) {
       endTurn(state, events, rng);
       return;
     }
-    const cost = Math.round(city.price * 0.6);
-    const canBuild = city.houseLevel < 4 && player.cash >= cost;
+    const baseCost = Math.round(city.price * 0.6);
+    const costCtx = { events, city, cost: baseCost, baseCost };
+    AUG.runHook(state, player, 'OnHouseCost', costCtx);
+    const cost = costCtx.cost;
+    const capCtx = { events, city, cap: 4 };
+    AUG.runHook(state, player, 'OnHouseLevelCap', capCtx);
+    const cap = capCtx.cap;
+    const canBuild = city.houseLevel < cap && player.cash >= cost;
     const canDemolish = city.houseLevel > 0;
     if (!canBuild && !canDemolish) {
       log(events, `${player.name} 经过自己的城市 ${cityLabel(state, sq.cityId)}`);
@@ -307,24 +483,62 @@ function resolveCity(state, player, sq, events, rng) {
     endTurn(state, events, rng);
     return;
   }
-  const rent = rentFor(city);
+  settleCityRent(state, player, sq, events, rng);
+}
+
+function settleCityRent(state, player, sq, events, rng, options) {
+  options = options || {};
+  const city = state.cities[sq.cityId];
   const owner = playerById(state, city.ownerId);
+  if (!owner || !owner.alive) {
+    endTurn(state, events, rng);
+    return;
+  }
+  let rent = rentFor(city);
+  // 拥有者海克斯：基础租金修正（连锁商圈/全域通胀）
+  const ownerCtx = { events, city, rent };
+  AUG.runHook(state, owner, 'OnOwnerRentBase', ownerCtx);
+  rent = ownerCtx.rent;
+  const immune = !!ownerCtx.immune;
+  // 股票抵扣
   const owned = sharesOf(state, player.id, sq.cityId);
   const ratio = owned / 20; // 每城 20 股
   let dr = 0;
   if (ratio >= 0.6) dr = 0.5;
   else if (ratio >= 0.4) dr = 0.3;
   else if (ratio >= 0.2) dr = 0.1;
-  const discount = Math.round(rent * dr); // 减免上限 50%
-  const pay = rent - discount;
-  player.cash -= pay;
-  owner.cash += rent; // 银行补足抵扣部分
-  log(events, `${player.name} 向 ${owner.name} 支付 ${cityLabel(state, sq.cityId)} 租金 ${rent}（持股抵扣 ${discount}）`, 'rent');
-  if (player.cash < 0) {
-    startSelfRescue(state, player, -player.cash, events, `支付租金`);
-  } else {
-    endTurn(state, events, rng);
+  if (immune) dr = 0;
+  let pay = rent - Math.round(rent * dr);
+  // 停留者海克斯：过路费加减免/强拆/买断
+  const landCtx = { events, tile: sq, city, owner, baseRent: rentFor(city), rent, pay, discount: 0, buyout: null, demote: false, reduced: false };
+  AUG.runHook(state, player, 'OnLandingTile', landCtx);
+  if (!options.skipBuyout && landCtx.buyout && player.cash >= landCtx.buyout.price) {
+    startAugmentBuyout(state, player, sq, events, rng);
+    return;
   }
+  pay = immune ? rent : landCtx.pay;
+  player.cash -= pay;
+  let ownerIncome = rent;
+  if (landCtx.demote && !immune) ownerIncome = 0; // 强拆免租：拥有者被拆房且本次无租收
+  owner.cash += ownerIncome;
+  log(events, `${player.name} 向 ${owner.name} 支付 ${cityLabel(state, sq.cityId)} 租金 ${pay}（基础 ${rentFor(city)}${dr ? `，持股抵扣 ${Math.round(rent * dr)}` : ''}${landCtx.reduced ? '，海克斯减半' : ''}）`, 'rent');
+  if (landCtx.demote) log(events, `${cityLabel(state, sq.cityId)} 已被强拆降级`, 'augment');
+  // 拥有者海克斯：资本清算
+  const paidCtx = { events, payer: player, amount: ownerIncome, payerAssets: totalAssetsOf(state, player), cede: null };
+  AUG.runHook(state, owner, 'OnRentPaid', paidCtx);
+  if (paidCtx.cede) transferCity(state, player, owner, paidCtx.cede.cityId, events);
+  if (player.cash < 0) startSelfRescue(state, player, -player.cash, events, `支付租金`);
+  else endTurn(state, events, rng);
+}
+
+function transferCity(state, from, to, cityId, events) {
+  const city = state.cities[cityId];
+  if (!city || city.ownerId !== from.id) return;
+  city.ownerId = to.id;
+  if (from.cities) from.cities = from.cities.filter((id) => id !== cityId);
+  to.cities.push(cityId);
+  city.buildReady = false;
+  log(events, `${from.name} 向 ${to.name} 割让 ${cityLabel(state, cityId)}`, 'augment');
 }
 
 function resolveChance(state, player, events, rng) {
@@ -352,7 +566,8 @@ function resolveChance(state, player, events, rng) {
     if (card.toStart) {
       target = GO;
       player.position = GO;
-      settleGo(state, player, events);
+      settleGo(state, player, events, rng);
+      if (state.phase === 'augment_choice') return;
       openStockWindow(state, player, events, 'end');
       return;
     }
@@ -362,7 +577,8 @@ function resolveChance(state, player, events, rng) {
     if (crossed || card.delta < 0 && player.position > target) {
       // 后退也可能跨过起点：后退从 1→40 会跨过 0
       if (crossed || (card.delta < 0 && target > player.position - card.delta)) {
-        settleGo(state, player, events);
+        settleGo(state, player, events, rng);
+        if (state.phase === 'augment_choice') return;
         openStockWindow(state, player, events, 'land');
         return;
       }
@@ -450,6 +666,13 @@ function finishSelfRescue(state, events, rng) {
 // ---------- 破产 ----------
 
 function bankrupt(state, player, events, rng) {
+  // 破产前置 Hook：末日对冲（免死金牌，限一次）
+  const preCtx = { events, cancel: false };
+  AUG.runHook(state, player, 'OnPreBankruptcy', preCtx);
+  if (preCtx.cancel) {
+    doomsdayHedge(state, player, events, rng);
+    return;
+  }
   player.alive = false;
   if (!state.rank.includes(player.id)) state.rank.push(player.id);
   log(events, `${player.name} 破产出局`, 'bankrupt');
@@ -498,6 +721,38 @@ function bankrupt(state, player, events, rng) {
     return;
   }
   afterBankrupt(state, events, rng);
+}
+
+function doomsdayHedge(state, player, events, rng) {
+  const owned = player.cities.map((id) => state.cities[id]).filter(Boolean);
+  let keep = null;
+  if (owned.length) {
+    keep = owned.reduce((a, b) => {
+      if ((b.houseLevel || 0) !== (a.houseLevel || 0)) return (b.houseLevel || 0) > (a.houseLevel || 0) ? b : a;
+      return b.price > a.price ? b : a;
+    });
+  }
+  for (const cityId of player.cities.slice()) {
+    if (keep && cityId === keep.id) continue;
+    const c = state.cities[cityId];
+    c.ownerId = null;
+    c.mortgaged = false;
+    c.houseLevel = 0;
+    c.mortgageInterest = 0;
+  }
+  player.cities = keep ? [keep.id] : [];
+  if (keep) {
+    keep.mortgaged = false;
+    keep.mortgageInterest = 0;
+  }
+  for (const airportId of player.airports.slice()) state.airports[airportId].ownerId = null;
+  player.airports = [];
+  for (const cityId of Object.keys(player.stocks)) state.stocks[cityId].holders[player.id] = 0;
+  player.stocks = {};
+  player.cash = 2000;
+  player.mortgageInterest = 0;
+  log(events, `${player.name} 末日对冲：免除债务，保留 ${keep ? cityLabel(state, keep.id) : '无地产'}，重置为 2000 现金`, 'augment');
+  endTurn(state, events, rng);
 }
 
 function surrenderLiquidation(state, player, events, rng) {
@@ -603,12 +858,14 @@ function auctionFail(state, events, rng) {
     city.houseLevel = 0;
     const pay = Math.round(cityTotalValue(city) * 0.5);
     seller.cash += pay;
+    if (seller.cities) seller.cities = seller.cities.filter((id) => id !== pend.cityId);
     log(events, `${cityLabel(state, pend.cityId)} 流拍，银行向 ${seller.name} 支付 ${pay}`, 'auction');
   } else if (seller) {
     city.ownerId = null;
     city.houseLevel = 0;
     const pay = Math.round(cityTotalValue(city) * 0.5);
     seller.cash += pay;
+    if (seller.cities) seller.cities = seller.cities.filter((id) => id !== pend.cityId);
     log(events, `${cityLabel(state, pend.cityId)} 流拍，银行向卖家支付 ${pay}`, 'auction');
   } else {
     city.ownerId = null;
@@ -634,7 +891,11 @@ function auctionWin(state, events, rng) {
   winner.lapBuys = (winner.lapBuys || 0) + 1; // 拍卖所得计入每圈 4 座上限制
   log(events, `${winner.name} 以 ${pend.currentBid} 获得 ${cityLabel(state, pend.cityId)}（含房产，本圈第 ${winner.lapBuys} 座）`, 'auction');
   // 出价归属
-  if (pend.sellerId) playerById(state, pend.sellerId).cash += pend.currentBid;
+  if (pend.sellerId) {
+    const seller = playerById(state, pend.sellerId);
+    seller.cash += pend.currentBid;
+    if (seller.cities) seller.cities = seller.cities.filter((id) => id !== pend.cityId);
+  }
   finishAuction(state, events, winner, rng);
 }
 
@@ -803,6 +1064,21 @@ function apply(state, action, rng) {
     case 'end_phase':
       // 供前端跳过（如机会卡/事件展示后）
       break;
+    case 'augment_choose':
+      augmentChoose(state, action, events, rng);
+      break;
+    case 'augment_reroll':
+      augmentReroll(state, action, events, rng);
+      break;
+    case 'augment_swap_pick':
+      augmentSwapPick(state, action, events, rng);
+      break;
+    case 'augment_buyout':
+      augmentBuyout(state, action, events, rng);
+      break;
+    case 'augment_dice_choice':
+      augmentDiceChoice(state, action, events, rng);
+      break;
     default:
       return { state, events, rejected: true };
   }
@@ -815,11 +1091,26 @@ function rollAction(state, p, events, rng) {
   const roll = rollDice(state, rng);
   state.dice = roll;
   log(events, `${p.name} 掷出 ${roll}`);
-  const steps = roll;
+  const ctx = { events, roll, steps: roll, spaceWarp: false };
+  AUG.runHook(state, p, 'OnDiceRoll', ctx);
+  if (ctx.spaceWarp) {
+    const a = rollDice(state, rng);
+    const b = rollDice(state, rng);
+    state.phase = 'augment_dice_choice';
+    state.pending = { type: 'augment_dice_choice', playerId: p.id, diceA: a, diceB: b };
+    log(events, `${p.name} 空间折跃：掷出 ${a} 与 ${b}，请选择位移算法`, 'augment');
+    return;
+  }
+  applyMovement(state, p, ctx.steps, events, rng);
+}
+
+function applyMovement(state, p, steps, events, rng) {
   const oldPos = p.position;
   p.position = (p.position + steps) % 42;
   const crossedGo = oldPos + steps >= 42;
-  if (crossedGo) settleGo(state, p, events);
+  applyPassingHooks(state, p, oldPos, steps, events, rng);
+  if (crossedGo) settleGo(state, p, events, rng);
+  if (state.phase === 'augment_choice') return; // 圈数触发海克斯，暂停结算
   if (crossedGo || p.position === GO) {
     if (crossedGo) {
       openStockWindow(state, p, events, 'land');
@@ -831,6 +1122,27 @@ function rollAction(state, p, events, rng) {
     }
   } else {
     resolveLanding(state, p.position, events, rng);
+  }
+  if (p.cash < 0 && !['self_rescue', 'augment_choice', 'augment_buyout', 'augment_swap', 'augment_dice_choice'].includes(state.phase)) {
+    startSelfRescue(state, p, -p.cash, events, `过路税`);
+  }
+}
+
+function applyPassingHooks(state, p, oldPos, steps, events, _rng) {
+  for (let i = 1; i < steps; i++) {
+    const sq = state.board[(oldPos + i) % 42];
+    if (!sq || sq.type !== 'city') continue;
+    const city = state.cities[sq.cityId];
+    if (!city || !city.ownerId || city.ownerId === p.id || city.mortgaged) continue;
+    const owner = playerById(state, city.ownerId);
+    if (!owner || !owner.alive) continue;
+    const ctx = { events, tile: sq, city, owner, passer: p, baseRent: rentFor(city), charge: 0 };
+    AUG.runHook(state, owner, 'OnPassingTile', ctx);
+    if (ctx.charge > 0) {
+      p.cash -= ctx.charge;
+      owner.cash += ctx.charge;
+      log(events, `${p.name} 路过 ${cityLabel(state, sq.cityId)}，向 ${owner.name} 支付过路税 ${ctx.charge}`, 'augment');
+    }
   }
 }
 
@@ -862,7 +1174,8 @@ function jailAction(state, p, action, events, rng) {
     p.position = (p.position + steps) % 42;
     log(events, `${p.name} 掷出 ${roll}（1 或 10）出狱并移动`);
     if (oldPos + steps >= 42) {
-      settleGo(state, p, events);
+      settleGo(state, p, events, rng);
+      if (state.phase === 'augment_choice') return;
       openStockWindow(state, p, events, 'land');
       return;
     }
@@ -901,25 +1214,45 @@ function buyAction(state, p, action, events, rng) {
       log(events, `${p.name} 本圈（起点到起点）已达购买上限（${LAP_CAP_NORMAL} 座房产，机场不限；购买、拍卖与直接出售所得均计入）`, 'buy');
       return;
     }
-    if (p.cash < city.price) {
+    const price = effectiveBuyPrice(state, p, city, events);
+    if (p.cash < price) {
       log(events, `${p.name} 资金不足，需先募集资金或取消购买`, 'buy');
       buyFundraise(state, p, { decision: 'start' }, events, rng);
       return;
     }
-    p.cash -= city.price;
+    p.cash -= price;
     city.ownerId = p.id;
     p.cities.push(pend.cityId);
     p.lapBuys = (p.lapBuys || 0) + 1;
     city.buildReady = false; // 购买后需再次到达才能建房
     bumpStock(state, pend.cityId, 0.1);
     enforceOwnerStockCap(state, p, pend.cityId, events);
-    log(events, `${p.name} 购买 ${cityLabel(state, pend.cityId)}（${city.price}，本圈第 ${p.lapBuys} 座）`, 'buy');
+    log(events, `${p.name} 购买 ${cityLabel(state, pend.cityId)}（${price}，本圈第 ${p.lapBuys} 座）`, 'buy');
     if (p.cash < 0) startSelfRescue(state, p, -p.cash, events, `购买`);
     else endTurn(state, events, rng);
   } else {
     log(events, `${p.name} 放弃购买 ${cityLabel(state, pend.cityId)}，进入拍卖`, 'auction');
     startAuction(state, pend.cityId, null, events, rng, { context: null });
   }
+}
+
+function effectiveBuyPrice(state, p, city, events) {
+  const ctx = { events, city, baseCost: city.price, cost: city.price };
+  AUG.runHook(state, p, 'OnTileBuyCostCalculate', ctx);
+  return ctx.cost;
+}
+
+function houseCostFor(state, p, city, events) {
+  const baseCost = Math.round(city.price * 0.6);
+  const ctx = { events, city, cost: baseCost, baseCost };
+  AUG.runHook(state, p, 'OnHouseCost', ctx);
+  return ctx.cost;
+}
+
+function houseCapFor(state, p, city, events) {
+  const ctx = { events, city, cap: 4 };
+  AUG.runHook(state, p, 'OnHouseLevelCap', ctx);
+  return ctx.cap;
 }
 
 function buyAirportAction(state, p, action, events, rng) {
@@ -983,8 +1316,9 @@ function respondBuild(state, p, action, events, rng) {
     return;
   }
   if (action.decision === 'build') {
-    const cost = Math.round(city.price * 0.6);
-    if (!city.mortgaged && city.houseLevel < 4 && p.cash >= cost) {
+    const cost = houseCostFor(state, p, city, events);
+    const cap = houseCapFor(state, p, city, events);
+    if (!city.mortgaged && city.houseLevel < cap && p.cash >= cost) {
       p.cash -= cost;
       city.houseLevel += 1;
       bumpStock(state, pend.cityId, 0.1);
@@ -1025,7 +1359,8 @@ function buyFundraise(state, p, action, events, rng) {
   }
   if (state.phase !== 'buy_fundraise') return;
   const target = pend.target;
-  const price = target.kind === 'city' ? state.cities[target.cityId].price : AIRPORT_PRICE;
+  const cityTarget = target.kind === 'city' ? state.cities[target.cityId] : null;
+  const price = cityTarget ? effectiveBuyPrice(state, p, cityTarget, events) : AIRPORT_PRICE;
   if (action.decision === 'confirm') {
     if (p.cash < price) {
       log(events, `${p.name} 资金仍不足（${p.cash}/${price}），无法完成购买`, 'rescue');
@@ -1039,14 +1374,14 @@ function buyFundraise(state, p, action, events, rng) {
         endTurn(state, events, rng);
         return;
       }
-      p.cash -= city.price;
+      p.cash -= price;
       city.ownerId = p.id;
       p.cities.push(target.cityId);
       p.lapBuys = (p.lapBuys || 0) + 1;
       city.buildReady = false; // 购买后需再次到达才能建房
       bumpStock(state, target.cityId, 0.1);
       enforceOwnerStockCap(state, p, target.cityId, events);
-      log(events, `${p.name} 募资完成，购买 ${cityLabel(state, target.cityId)}（${city.price}，本圈第 ${p.lapBuys} 座）`, 'buy');
+      log(events, `${p.name} 募资完成，购买 ${cityLabel(state, target.cityId)}（${price}，本圈第 ${p.lapBuys} 座）`, 'buy');
     } else {
       const airport = state.airports[target.airportId];
       if (airport.ownerId) { endTurn(state, events, rng); return; }
@@ -1071,11 +1406,12 @@ function buyFundraise(state, p, action, events, rng) {
 function buildHouse(state, p, cityId, events) {
   if (state.phase !== 'waiting_roll') return;
   const city = state.cities[cityId];
-  if (city.ownerId !== p.id || city.mortgaged || city.houseLevel >= 4 || p.position !== state.board.find((s) => s.cityId === cityId).id || city.buildReady === false) {
+  const cap = houseCapFor(state, p, city, events);
+  if (city.ownerId !== p.id || city.mortgaged || city.houseLevel >= cap || p.position !== state.board.find((s) => s.cityId === cityId).id || city.buildReady === false) {
     log(events, `${p.name} 无法建造：需再次到达 ${cityLabel(state, cityId)} 后才能建房`, 'house');
     return;
   }
-  const cost = Math.round(city.price * 0.6);
+  const cost = houseCostFor(state, p, city, events);
   if (p.cash < cost) return;
   p.cash -= cost;
   city.houseLevel += 1;
